@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Google Command-line Tools 22 ships this bootstrapper only for Linux x86_64.
+# The bootstrapper downloads another CLI at runtime, which this fixed SDK avoids.
+echo "android: Google's Android CLI bootstrapper is unavailable for Linux AArch64." >&2
+echo "Use sdkmanager, avdmanager, lint, apkanalyzer, d8, or r8 directly." >&2
+exit 1
+

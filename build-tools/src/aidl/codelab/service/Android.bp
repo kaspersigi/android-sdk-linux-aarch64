@@ -1,0 +1,57 @@
+// Copyright (C) 2025 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+rust_binary {
+    name: "hello-world-service-test",
+    srcs: [
+        "service_main.rs",
+    ],
+    rustlibs: [
+        "libhello_service",
+        "libbinder_rs",
+        "liblog_rust",
+        // The generated AIDL libraries have the backend appended to the
+        // end of the name.
+        // `hello.world-<backend>`. In this case the backend is `rust`
+        "hello.world-rust",
+    ],
+    init_rc: ["hello-world-service-test.rc"],
+}
+
+rust_fuzz {
+    name: "hello-world-fuzzer",
+    srcs: ["service_fuzzer.rs"],
+    // These fuzzer defaults have everything needed for the service fuzzer outside
+    // of the specific dependencies of this service.
+    defaults: ["service_fuzzer_defaults_rs"],
+    rustlibs: [
+        "libhello_service",
+        "liblog_rust",
+        "hello.world-rust",
+    ],
+}
+
+// Implementation of the interface. This is in its own library
+// so we can use it for the service on the device AND use it in the fuzzer
+// to find bugs.
+rust_library {
+    name: "libhello_service",
+    crate_name: "hello_service",
+    srcs: ["hello_service.rs"],
+    rustlibs: [
+        "libbinder_rs",
+        "liblog_rust",
+        "hello.world-rust",
+    ],
+}

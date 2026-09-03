@@ -1,0 +1,16 @@
+#
+# Adapted from https://github.com/lzhiyong/android-sdk-tools (Apache 2.0)
+#
+
+include(libbase.cmake)
+include(liblog.cmake)
+include(libcutils.cmake)
+include(libutils.cmake)
+include(libandroidfw.cmake)
+include(libincfs.cmake)
+include(libselinux.cmake)
+include(libsepol.cmake)
+include(libziparchive.cmake)
+include(libbuildversion.cmake)
+include(libpackagelistparser.cmake)
+include(libprocessgroup.cmake)

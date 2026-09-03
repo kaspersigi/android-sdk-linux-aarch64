@@ -1,0 +1,4 @@
+service hello-world-service-test /system/bin/hello-world-service-test
+    class core
+    user system
+    group nobody

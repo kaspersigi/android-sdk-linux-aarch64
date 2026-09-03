@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+sdk_root="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)"
+lld="$sdk_root/ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/bin/lld"
+if [ ! -x "$lld" ]; then
+    echo "lld: Android NDK 27.3.13750724 is not installed in this fixed SDK." >&2
+    exit 1
+fi
+exec "$lld" "$@"
+

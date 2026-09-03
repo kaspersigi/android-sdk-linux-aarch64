@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+echo "$(basename "$0"): RenderScript host tooling is deprecated and is not available in this Linux AArch64 SDK." >&2
+exit 1
+

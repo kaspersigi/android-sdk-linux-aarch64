@@ -1,0 +1,50 @@
+{
+  "presubmit": [
+    {
+      "name": "gtest_isolated_tests"
+    },
+    {
+      // Confirm VTS test can pass
+      "name": "VtsHalPowerStatsV1_0TargetTest"
+    }
+  ],
+  "hwasan-postsubmit": [
+    {
+      "name": "gtest_isolated_tests"
+    },
+    {
+      "name": "gtest_tests"
+    },
+    {
+      "name": "gtest_tests_no_main"
+    },
+    {
+      "name": "googletest-param-test-test"
+    },
+    {
+      "name": "gtest-typed-test_test"
+    },
+    {
+      "name": "gtest_prod_test"
+    },
+    {
+      "name": "gtest_ndk_tests"
+    },
+    {
+      "name": "gtest_ndk_tests_no_main"
+    },
+    {
+      "name": "googletest-param-test-test_ndk"
+    },
+    {
+      "name": "gtest-typed-test_test_ndk"
+    },
+    {
+      "name": "gtest_prod_test_ndk"
+    },
+    {
+      // Confirm VTS test can pass
+      "name": "VtsHalPowerStatsV1_0TargetTest"
+    }
+  ]
+}
