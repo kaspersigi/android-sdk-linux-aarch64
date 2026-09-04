@@ -34,10 +34,27 @@ for relative in \
     require_x86_64_reference_elf "$reference/$relative"
 done
 
-[[ -d "$reference/ndk/$SDK_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64" ]] ||
-    die "SDK reference does not contain the pinned Linux x86_64 NDK"
-[[ ! -e "$reference/ndk/$SDK_NDK_VERSION/toolchains/llvm/prebuilt/linux-aarch64" ]] ||
-    die "SDK reference unexpectedly contains a Linux AArch64 NDK host tree"
+reference_ndk="$reference/ndk/$SDK_NDK_VERSION"
+reference_ndk_x86_64_roots=(
+    toolchains/llvm/prebuilt/linux-x86_64
+    prebuilt/linux-x86_64
+    shader-tools/linux-x86_64
+    simpleperf/bin/linux/x86_64
+)
+reference_ndk_aarch64_roots=(
+    toolchains/llvm/prebuilt/linux-aarch64
+    prebuilt/linux-aarch64
+    shader-tools/linux-aarch64
+    simpleperf/bin/linux/aarch64
+)
+for relative in "${reference_ndk_x86_64_roots[@]}"; do
+    [[ -d "$reference_ndk/$relative" ]] ||
+        die "SDK reference is missing the Linux x86_64 NDK host root: $relative"
+done
+for relative in "${reference_ndk_aarch64_roots[@]}"; do
+    [[ ! -e "$reference_ndk/$relative" && ! -L "$reference_ndk/$relative" ]] ||
+        die "SDK reference unexpectedly contains a Linux AArch64 NDK host root: $relative"
+done
 
 expected_reference_entries=31095
 if [[ -e "$reference/.knownPackages" || -L "$reference/.knownPackages" ]]; then
@@ -77,7 +94,78 @@ ndk="$sdk/ndk/$SDK_NDK_VERSION"
 ndk_toolchain="$ndk/toolchains/llvm/prebuilt/linux-aarch64"
 ndk_host_runtime_dir="$ndk_toolchain/lib/aarch64-unknown-linux-gnu"
 ndk_compiler_rt_dir="$ndk_toolchain/lib/clang/18/lib/aarch64-unknown-linux-gnu"
+declare -A ndk_packaged_host_sonames=()
 ndk_host_elf_count=0
+
+register_ndk_packaged_host_sonames() {
+    local root="$1" scope="$2" path kind soname
+    local -a find_args=("$root")
+
+    [[ -d "$root" ]] || die "required NDK host directory is missing: $root"
+    if [[ "$scope" == "shallow" ]]; then
+        find_args+=(-maxdepth 1)
+    fi
+    while IFS= read -r -d '' path; do
+        kind="$(file -b -- "$path")"
+        [[ "$kind" == ELF* ]] || continue
+        soname=$(
+            readelf -d -- "$path" |
+                sed -n 's/.*Library soname: \[\([^]]*\)\].*/\1/p'
+        )
+        if [[ -n "$soname" ]]; then
+            ndk_packaged_host_sonames["$soname"]="$path"
+        fi
+    done < <(find "${find_args[@]}" -type f -print0)
+}
+
+check_ndk_host_dependency_closure() {
+    local path="$1" dependency
+    local nis_extension="$ndk_toolchain/python3/lib/python3.11/lib-dynload/nis.cpython-311-aarch64-linux-gnu.so"
+
+    while IFS= read -r dependency; do
+        case "$dependency" in
+            libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|ld-linux-aarch64.so.1)
+                ;;
+            libnsl.so.1)
+                [[ "$path" == "$nis_extension" ]] ||
+                    die "unexpected external shared-library dependency in $path: $dependency"
+                ;;
+            libgcc_s.so.1)
+                [[ "$path" == "$ndk_compiler_rt_dir/"* ]] ||
+                    die "unexpected external shared-library dependency in $path: $dependency"
+                ;;
+            *)
+                [[ ${ndk_packaged_host_sonames[$dependency]+present} ]] ||
+                    die "NDK host ELF depends on an unpackaged shared library in $path: $dependency"
+                ;;
+        esac
+    done < <(
+        readelf -d -- "$path" |
+            sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'
+    )
+}
+
+check_ndk_runtime_needed_libraries() {
+    local path="$1" allow_libgcc="$2" dependency
+
+    while IFS= read -r dependency; do
+        case "$dependency" in
+            libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|ld-linux-aarch64.so.1)
+                ;;
+            libgcc_s.so.1)
+                [[ "$allow_libgcc" == 1 ]] ||
+                    die "unexpected external shared-library dependency in $path: $dependency"
+                ;;
+            *)
+                die "unexpected shared-library dependency in NDK runtime $path: $dependency"
+                ;;
+        esac
+    done < <(
+        readelf -d -- "$path" |
+            sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'
+    )
+}
+
 scan_ndk_host_elfs() {
     local root="$1" scope="$2" path kind
     local -a find_args=("$root")
@@ -91,30 +179,9 @@ scan_ndk_host_elfs() {
         [[ "$kind" == ELF* ]] || continue
         [[ "$kind" == *'ARM aarch64'* || "$kind" == *AArch64* ]] ||
             die "non-AArch64 ELF in an NDK host position: $path: $kind"
+        check_ndk_host_dependency_closure "$path"
         ((ndk_host_elf_count += 1))
     done < <(find "${find_args[@]}" -type f -print0)
-}
-
-check_ndk_needed_libraries() {
-    local path="$1" allow_libgcc="$2" dependency
-
-    while IFS= read -r dependency; do
-        case "$dependency" in
-            libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|ld-linux-aarch64.so.1)
-                ;;
-            libgcc_s.so.1)
-                if [[ "$allow_libgcc" != 1 ]]; then
-                    die "unexpected external shared-library dependency in $path: $dependency"
-                fi
-                ;;
-            *)
-                die "unexpected external shared-library dependency in $path: $dependency"
-                ;;
-        esac
-    done < <(
-        readelf -d -- "$path" |
-            sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'
-    )
 }
 
 check_sdk_host_needed_libraries() {
@@ -122,7 +189,7 @@ check_sdk_host_needed_libraries() {
 
     while IFS= read -r dependency; do
         case "$dependency" in
-            libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|libgcc_s.so.1|ld-linux-aarch64.so.1)
+            libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|ld-linux-aarch64.so.1)
                 ;;
             *)
                 die "unexpected external shared-library dependency in $path: $dependency"
@@ -141,18 +208,34 @@ grep -Fqx 'Pkg.ReleaseName = r27d' \
     "$ndk/source.properties" ||
     die "NDK does not report pinned release name r27d"
 
-scan_ndk_host_elfs "$ndk_toolchain/bin" recursive
-scan_ndk_host_elfs "$ndk_toolchain/python3" recursive
-scan_ndk_host_elfs "$ndk_toolchain/lib/python3.11" recursive
-scan_ndk_host_elfs "$ndk/prebuilt/linux-aarch64/bin" recursive
-scan_ndk_host_elfs "$ndk/shader-tools/linux-aarch64" recursive
-scan_ndk_host_elfs "$ndk/simpleperf/bin/linux/aarch64" recursive
-scan_ndk_host_elfs "$ndk_toolchain/lib" shallow
-scan_ndk_host_elfs "$ndk_toolchain/lib/aarch64-unknown-linux-gnu" shallow
-scan_ndk_host_elfs \
-    "$ndk_toolchain/lib/clang/18/lib/aarch64-unknown-linux-gnu" shallow
-scan_ndk_host_elfs "$ndk_toolchain/musl/lib" shallow
+ndk_recursive_host_roots=(
+    "$ndk_toolchain/bin"
+    "$ndk_toolchain/python3"
+    "$ndk_toolchain/lib/python3.11"
+    "$ndk/prebuilt/linux-aarch64/bin"
+    "$ndk/shader-tools/linux-aarch64"
+    "$ndk/simpleperf/bin/linux/aarch64"
+)
+ndk_shallow_host_roots=(
+    "$ndk_toolchain/lib"
+    "$ndk_host_runtime_dir"
+    "$ndk_compiler_rt_dir"
+    "$ndk_toolchain/musl/lib"
+)
+for root in "${ndk_recursive_host_roots[@]}"; do
+    register_ndk_packaged_host_sonames "$root" recursive
+done
+for root in "${ndk_shallow_host_roots[@]}"; do
+    register_ndk_packaged_host_sonames "$root" shallow
+done
+for root in "${ndk_recursive_host_roots[@]}"; do
+    scan_ndk_host_elfs "$root" recursive
+done
+for root in "${ndk_shallow_host_roots[@]}"; do
+    scan_ndk_host_elfs "$root" shallow
+done
 (( ndk_host_elf_count > 0 )) || die "no NDK host ELF files were found"
+echo "ndk_packaged_host_sonames=${#ndk_packaged_host_sonames[@]}"
 echo "ndk_aarch64_host_elfs=$ndk_host_elf_count"
 
 for name in libc++.so libc++abi.so libunwind.so; do
@@ -160,12 +243,12 @@ for name in libc++.so libc++abi.so libunwind.so; do
     [[ -f "$runtime" ]] || die "required NDK host runtime is missing: $runtime"
     readelf -d -- "$runtime" | grep -Fq "Library soname: [$name]" ||
         die "NDK host runtime has an unexpected SONAME: $runtime"
-    check_ndk_needed_libraries "$runtime" 0
+    check_ndk_runtime_needed_libraries "$runtime" 0
 done
 
 ndk_compiler_rt_shared_count=0
 while IFS= read -r -d '' runtime; do
-    check_ndk_needed_libraries "$runtime" 1
+    check_ndk_runtime_needed_libraries "$runtime" 1
     ((ndk_compiler_rt_shared_count += 1))
 done < <(find "$ndk_compiler_rt_dir" -maxdepth 1 -type f -name '*.so' -print0)
 (( ndk_compiler_rt_shared_count > 0 )) ||
@@ -228,8 +311,8 @@ for name in "${native_build_tools[@]}"; do
         die "$path unexpectedly depends on musl"
     fi
     if readelf -d "$path" |
-       grep -Eq 'Shared library: \[(libstdc\+\+\.so|libz\.so|libc\+\+abi\.so|libunwind\.so)'; then
-        die "$path depends on an unpackaged C++ or zlib runtime"
+       grep -Eq 'Shared library: \[(libstdc\+\+\.so|libgcc_s\.so|libz\.so|libc\+\+abi\.so|libunwind\.so)'; then
+        die "$path depends on an unpackaged compiler, C++ or zlib runtime"
     fi
     readelf -d "$path" | grep -Fq 'Library runpath: [$ORIGIN/lib64]' ||
         die "$path does not resolve libc++.so relative to Build-Tools"

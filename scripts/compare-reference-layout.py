@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import stat
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -237,6 +238,8 @@ def inventory(root: Path, normalize_reference: bool = False) -> dict[str, Entry]
             kind = "other"
         if normalize_reference:
             relative = normalize_reference_name(relative)
+        if relative in result:
+            raise ValueError(f"normalized reference path collision: {relative}")
         result[relative] = Entry(kind=kind, source=path, mode=mode, link=link)
     return result
 
@@ -247,8 +250,12 @@ def main() -> int:
     parser.add_argument("candidate", type=Path)
     args = parser.parse_args()
 
-    reference = inventory(args.reference, normalize_reference=True)
-    candidate = inventory(args.candidate)
+    try:
+        reference = inventory(args.reference, normalize_reference=True)
+        candidate = inventory(args.candidate)
+    except (OSError, ValueError) as error:
+        print(f"error: cannot inventory SDK trees: {error}", file=sys.stderr)
+        return 1
     missing = sorted(set(reference) - set(candidate))
     extra = sorted(set(candidate) - set(reference))
     mismatched_types = sorted(

@@ -59,8 +59,8 @@ for name in "${targets[@]}"; do
         die "$name unexpectedly depends on musl"
     fi
     if readelf -d "$output/$name" |
-       grep -Eq 'Shared library: \[(libstdc\+\+\.so|libz\.so|libc\+\+abi\.so|libunwind\.so)'; then
-        die "$name depends on an unpackaged C++ or zlib runtime"
+       grep -Eq 'Shared library: \[(libstdc\+\+\.so|libgcc_s\.so|libz\.so|libc\+\+abi\.so|libunwind\.so)'; then
+        die "$name depends on an unpackaged compiler, C++ or zlib runtime"
     fi
     readelf -d "$output/$name" | grep -Fq 'Library runpath: [$ORIGIN/lib64]' ||
         die "$name does not resolve libc++.so relative to Build-Tools"

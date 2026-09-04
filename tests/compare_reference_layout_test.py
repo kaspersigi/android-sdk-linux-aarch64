@@ -112,5 +112,46 @@ class TypeMismatchTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+class NormalizedReferenceCollisionTest(unittest.TestCase):
+    def test_x86_64_and_aarch64_host_paths_cannot_collapse(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            reference = root / "reference"
+            candidate = root / "candidate"
+            candidate.mkdir()
+            for host in ("linux-x86_64", "linux-aarch64"):
+                path = (
+                    reference
+                    / "ndk/27.3.13750724/prebuilt"
+                    / host
+                    / "bin/make"
+                )
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(host.encode())
+
+            with self.assertRaisesRegex(
+                ValueError, "normalized reference path collision"
+            ):
+                MODULE["inventory"](reference, normalize_reference=True)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    str(PROJECT_ROOT / "scripts/compare-reference-layout.py"),
+                    str(reference),
+                    str(candidate),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("normalized reference path collision", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

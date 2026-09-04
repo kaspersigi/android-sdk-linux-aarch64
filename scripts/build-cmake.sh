@@ -58,8 +58,8 @@ for version in 3.22.1 4.1.2; do
     done
     ninja_binary="$build_dir/cmake-aarch64/$version/bin/ninja"
     if readelf -d "$ninja_binary" |
-       grep -Fq 'Shared library: [libstdc++.so'; then
-        die "$ninja_binary depends on the host libstdc++ runtime"
+       grep -Eq 'Shared library: \[(libstdc\+\+\.so|libgcc_s\.so)'; then
+        die "$ninja_binary depends on the host C++ or GCC runtime"
     fi
 done
 

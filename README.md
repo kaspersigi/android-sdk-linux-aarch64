@@ -78,15 +78,15 @@ self-referential reference tree; reference validation is never silently
 skipped.
 
 Validation also scans every NDK host ELF position for AArch64 binaries, checks
-the host C++ runtime SONAMEs and shared-library dependency closure, loads each
-host runtime independently, and verifies that compiler-rt does not depend on a
+every host ELF's package-local SONAME dependency closure, loads each host C++
+runtime independently, and verifies that compiler-rt does not depend on a
 system `libstdc++.so`. It then uses the packaged Clang and LLD to link a C
 executable and C++ shared library for `aarch64-linux-android21`. These checks
 verify the downloaded producer artifact again after it has been integrated
 into the complete SDK. The SDK-level gate also checks every explicit
 Build-Tools, CMake, Ninja, and Platform-Tools host ELF against the permitted
-GNU/Linux runtime dependency set, verifies component libc++ SONAMEs, and loads
-all component libc++ runtimes independently.
+GNU/Linux runtime dependency set (excluding system `libgcc_s.so.1`), verifies
+component libc++ SONAMEs, and loads all component libc++ runtimes independently.
 
 ## Recommended environment
 
