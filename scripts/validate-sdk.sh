@@ -78,8 +78,11 @@ checksum="$archive.sha256"
     cd "$(dirname -- "$archive")"
     sha256sum --check "$(basename -- "$checksum")"
 )
+python3 -B "$project_root/scripts/check-zip-metadata.py" "$archive"
 
 python3 -B "$project_root/tests/compare_reference_layout_test.py"
+"$project_root/tests/check-aarch64-elf-test.sh"
+"$project_root/tests/check-aarch64-host-archives-test.sh"
 
 grep -Fqx "Pkg.Revision=$SDK_BUILD_TOOLS_VERSION" \
     "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/source.properties"
@@ -97,8 +100,22 @@ ndk_compiler_rt_dir="$ndk_toolchain/lib/clang/18/lib/aarch64-unknown-linux-gnu"
 declare -A ndk_packaged_host_sonames=()
 ndk_host_elf_count=0
 
+validate_ndk_host_elf() {
+    local path="$1"
+    case "$path" in
+        "$ndk_compiler_rt_dir/clang_rt.crtbegin.o"|\
+        "$ndk_compiler_rt_dir/clang_rt.crtend.o")
+            "$project_root/scripts/check-aarch64-elf.sh" \
+                --allow-relocatable "$path"
+            ;;
+        *)
+            require_aarch64_elf "$path"
+            ;;
+    esac
+}
+
 register_ndk_packaged_host_sonames() {
-    local root="$1" scope="$2" path kind soname
+    local root="$1" scope="$2" path kind soname dynamic_section
     local -a find_args=("$root")
 
     [[ -d "$root" ]] || die "required NDK host directory is missing: $root"
@@ -108,10 +125,11 @@ register_ndk_packaged_host_sonames() {
     while IFS= read -r -d '' path; do
         kind="$(file -b -- "$path")"
         [[ "$kind" == ELF* ]] || continue
-        soname=$(
-            readelf -d -- "$path" |
-                sed -n 's/.*Library soname: \[\([^]]*\)\].*/\1/p'
-        )
+        validate_ndk_host_elf "$path"
+        dynamic_section="$(read_elf_dynamic_section "$path")" ||
+            die "cannot read NDK host ELF dynamic section: $path"
+        soname="$(sed -n 's/.*Library soname: \[\([^]]*\)\].*/\1/p' \
+            <<< "$dynamic_section")"
         if [[ -n "$soname" ]]; then
             ndk_packaged_host_sonames["$soname"]="$path"
         fi
@@ -119,8 +137,11 @@ register_ndk_packaged_host_sonames() {
 }
 
 check_ndk_host_dependency_closure() {
-    local path="$1" dependency
+    local path="$1" dependency dynamic_section
     local nis_extension="$ndk_toolchain/python3/lib/python3.11/lib-dynload/nis.cpython-311-aarch64-linux-gnu.so"
+
+    dynamic_section="$(read_elf_dynamic_section "$path")" ||
+        die "cannot read NDK host ELF dynamic section: $path"
 
     while IFS= read -r dependency; do
         case "$dependency" in
@@ -139,14 +160,16 @@ check_ndk_host_dependency_closure() {
                     die "NDK host ELF depends on an unpackaged shared library in $path: $dependency"
                 ;;
         esac
-    done < <(
-        readelf -d -- "$path" |
-            sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'
-    )
+    done < <(sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p' \
+        <<< "$dynamic_section")
 }
 
 check_ndk_runtime_needed_libraries() {
-    local path="$1" allow_libgcc="$2" dependency
+    local path="$1" allow_libgcc="$2" dependency dynamic_section
+
+    require_aarch64_elf "$path"
+    dynamic_section="$(read_elf_dynamic_section "$path")" ||
+        die "cannot read NDK runtime dynamic section: $path"
 
     while IFS= read -r dependency; do
         case "$dependency" in
@@ -160,10 +183,8 @@ check_ndk_runtime_needed_libraries() {
                 die "unexpected shared-library dependency in NDK runtime $path: $dependency"
                 ;;
         esac
-    done < <(
-        readelf -d -- "$path" |
-            sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'
-    )
+    done < <(sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p' \
+        <<< "$dynamic_section")
 }
 
 scan_ndk_host_elfs() {
@@ -177,15 +198,16 @@ scan_ndk_host_elfs() {
     while IFS= read -r -d '' path; do
         kind="$(file -b -- "$path")"
         [[ "$kind" == ELF* ]] || continue
-        [[ "$kind" == *'ARM aarch64'* || "$kind" == *AArch64* ]] ||
-            die "non-AArch64 ELF in an NDK host position: $path: $kind"
         check_ndk_host_dependency_closure "$path"
         ((ndk_host_elf_count += 1))
     done < <(find "${find_args[@]}" -type f -print0)
 }
 
 check_sdk_host_needed_libraries() {
-    local path="$1" dependency
+    local path="$1" dependency dynamic_section
+
+    dynamic_section="$(read_elf_dynamic_section "$path")" ||
+        die "cannot read SDK host ELF dynamic section: $path"
 
     while IFS= read -r dependency; do
         case "$dependency" in
@@ -195,10 +217,8 @@ check_sdk_host_needed_libraries() {
                 die "unexpected external shared-library dependency in $path: $dependency"
                 ;;
         esac
-    done < <(
-        readelf -d -- "$path" |
-            sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'
-    )
+    done < <(sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p' \
+        <<< "$dynamic_section")
 }
 
 grep -Fqx "Pkg.Revision = $SDK_NDK_VERSION" \
@@ -238,10 +258,14 @@ done
 echo "ndk_packaged_host_sonames=${#ndk_packaged_host_sonames[@]}"
 echo "ndk_aarch64_host_elfs=$ndk_host_elf_count"
 
+"$project_root/scripts/check-aarch64-host-archives.sh" "$ndk"
+
 for name in libc++.so libc++abi.so libunwind.so; do
     runtime="$ndk_host_runtime_dir/$name"
     [[ -f "$runtime" ]] || die "required NDK host runtime is missing: $runtime"
-    readelf -d -- "$runtime" | grep -Fq "Library soname: [$name]" ||
+    dynamic_section="$(read_elf_dynamic_section "$runtime")" ||
+        die "cannot read NDK host runtime dynamic section: $runtime"
+    grep -Fq "Library soname: [$name]" <<< "$dynamic_section" ||
         die "NDK host runtime has an unexpected SONAME: $runtime"
     check_ndk_runtime_needed_libraries "$runtime" 0
 done
@@ -291,30 +315,40 @@ for relative in "${host_elfs[@]}"; do
     check_sdk_host_needed_libraries "$sdk/$relative"
 done
 
-readelf -d "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so" |
-    grep -Fq 'Library soname: [libc++.so]' ||
+dynamic_section="$(read_elf_dynamic_section \
+    "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so")" ||
+    die "cannot read Build-Tools libc++.so dynamic section"
+grep -Fq 'Library soname: [libc++.so]' <<< "$dynamic_section" ||
     die "Build-Tools libc++.so has an unexpected SONAME"
-readelf -d "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so.1" |
-    grep -Fq 'Library soname: [libc++.so.1]' ||
+dynamic_section="$(read_elf_dynamic_section \
+    "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so.1")" ||
+    die "cannot read Build-Tools libc++.so.1 dynamic section"
+grep -Fq 'Library soname: [libc++.so.1]' <<< "$dynamic_section" ||
     die "Build-Tools libc++.so.1 has an unexpected SONAME"
-readelf -d "$sdk/platform-tools/lib64/libc++.so" |
-    grep -Fq 'Library soname: [libc++.so]' ||
+dynamic_section="$(read_elf_dynamic_section \
+    "$sdk/platform-tools/lib64/libc++.so")" ||
+    die "cannot read Platform-Tools libc++.so dynamic section"
+grep -Fq 'Library soname: [libc++.so]' <<< "$dynamic_section" ||
     die "Platform-Tools libc++.so has an unexpected SONAME"
 
 native_build_tools=(aapt aapt2 aidl dexdump split-select zipalign)
 for name in "${native_build_tools[@]}"; do
     path="$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/$name"
-    readelf -l "$path" |
-        grep -Fq 'Requesting program interpreter: /lib/ld-linux-aarch64.so.1' ||
+    program_headers="$(read_elf_program_headers "$path")" ||
+        die "cannot read program headers from $path"
+    dynamic_section="$(read_elf_dynamic_section "$path")" ||
+        die "cannot read dynamic section from $path"
+    grep -Fq 'Requesting program interpreter: /lib/ld-linux-aarch64.so.1' \
+        <<< "$program_headers" ||
         die "$path is not linked for GNU/glibc AArch64"
-    if readelf -d "$path" | grep -q 'libc_musl'; then
+    if grep -q 'libc_musl' <<< "$dynamic_section"; then
         die "$path unexpectedly depends on musl"
     fi
-    if readelf -d "$path" |
-       grep -Eq 'Shared library: \[(libstdc\+\+\.so|libgcc_s\.so|libz\.so|libc\+\+abi\.so|libunwind\.so)'; then
+    if grep -Eq 'Shared library: \[(libstdc\+\+\.so|libgcc_s\.so|libz\.so|libc\+\+abi\.so|libunwind\.so)' \
+        <<< "$dynamic_section"; then
         die "$path depends on an unpackaged compiler, C++ or zlib runtime"
     fi
-    readelf -d "$path" | grep -Fq 'Library runpath: [$ORIGIN/lib64]' ||
+    grep -Fq 'Library runpath: [$ORIGIN/lib64]' <<< "$dynamic_section" ||
         die "$path does not resolve libc++.so relative to Build-Tools"
 done
 

@@ -14,6 +14,10 @@ version set mirrors `/mnt/develop/android/sdk`:
 
 The assembled directory is `dist/sdk`. The final archive is
 `dist/android-sdk-linux.zip` and has one top-level `sdk/` directory.
+Sorted paths, stripped ZIP extra fields, and a fixed
+`2008-01-01 00:00:00 UTC` timestamp make packaging reproducible for unchanged
+assembled content.
+
 The installed SDK is fixed and offline-capable: assembly does not invoke
 `sdkmanager`, and consumers do not need it to download or update components.
 
@@ -77,8 +81,9 @@ tree. The validator rejects an AArch64, incomplete, bytecode-contaminated, or
 self-referential reference tree; reference validation is never silently
 skipped.
 
-Validation also scans every NDK host ELF position for AArch64 binaries, checks
-every host ELF's package-local SONAME dependency closure, loads each host C++
+Validation also structurally parses every NDK host ELF position, checks every
+host ELF's package-local SONAME dependency closure, verifies the pinned member
+inventory and structure of all NDK host static libraries, loads each host C++
 runtime independently, and verifies that compiler-rt does not depend on a
 system `libstdc++.so`. It then uses the packaged Clang and LLD to link a C
 executable and C++ shared library for `aarch64-linux-android21`. These checks

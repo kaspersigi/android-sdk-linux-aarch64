@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import runpy
+import struct
 import subprocess
 import sys
 import tempfile
@@ -18,11 +19,13 @@ content_difference_is_expected = MODULE["content_difference_is_expected"]
 
 
 def write_elf(path: Path, machine: int) -> None:
-    header = bytearray(20)
-    header[:4] = b"\x7fELF"
-    header[5] = 1
-    header[18:20] = machine.to_bytes(2, "little")
-    path.write_bytes(header)
+    identity = b"\x7fELF" + bytes((2, 1, 1)) + bytes(9)
+    header = struct.pack(
+        "<16sHHIQQQIHHHHHH",
+        identity, 3, machine, 1, 0, 64, 0, 0, 64, 56, 1, 64, 0, 0,
+    )
+    program = struct.pack("<IIQQQQQQ", 1, 5, 0, 0, 0, 120, 120, 4096)
+    path.write_bytes(header + program)
 
 
 class NdkHostElfDifferenceTest(unittest.TestCase):
@@ -76,6 +79,40 @@ class NdkHostElfDifferenceTest(unittest.TestCase):
                         relative, self.expected, self.actual
                     )
                 )
+
+    def test_truncated_host_elf_is_rejected(self) -> None:
+        self.candidate.write_bytes(self.candidate.read_bytes()[:64])
+        self.assertFalse(
+            content_difference_is_expected(
+                "ndk/27.3.13750724/toolchains/llvm/prebuilt/"
+                "linux-aarch64/bin/clang-tidy",
+                self.expected,
+                self.actual,
+            )
+        )
+
+    def test_relocatable_object_is_rejected_as_host_program(self) -> None:
+        content = bytearray(self.candidate.read_bytes())
+        struct.pack_into("<H", content, 16, 1)
+        self.candidate.write_bytes(content)
+        self.assertFalse(
+            content_difference_is_expected(
+                "ndk/27.3.13750724/toolchains/llvm/prebuilt/"
+                "linux-aarch64/bin/clang-tidy",
+                self.expected,
+                self.actual,
+            )
+        )
+
+    def test_explicit_sdk_host_elf_requires_valid_structures(self) -> None:
+        relative = "build-tools/36.0.0/aapt"
+        self.assertTrue(
+            content_difference_is_expected(relative, self.expected, self.actual)
+        )
+        self.candidate.write_bytes(self.candidate.read_bytes()[:64])
+        self.assertFalse(
+            content_difference_is_expected(relative, self.expected, self.actual)
+        )
 
 
 class TypeMismatchTest(unittest.TestCase):

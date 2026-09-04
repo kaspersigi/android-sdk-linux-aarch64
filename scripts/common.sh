@@ -237,6 +237,34 @@ copy_google_package() {
 
 require_aarch64_elf() {
     local path="$1"
-    file -b "$path" | grep -Eq 'ARM aarch64|AArch64' ||
-        die "$path is not an AArch64 ELF"
+    "$project_root/scripts/check-aarch64-elf.sh" "$path" ||
+        die "$path is not a structurally valid AArch64 ELF"
+}
+
+read_elf_dynamic_section() {
+    local path="$1" output
+
+    if ! output="$(readelf -d -- "$path" 2>&1)"; then
+        printf '%s\n' "$output" >&2
+        return 1
+    fi
+    if grep -Fq 'Error:' <<< "$output"; then
+        printf '%s\n' "$output" >&2
+        return 1
+    fi
+    printf '%s\n' "$output"
+}
+
+read_elf_program_headers() {
+    local path="$1" output
+
+    if ! output="$(readelf -l -- "$path" 2>&1)"; then
+        printf '%s\n' "$output" >&2
+        return 1
+    fi
+    if grep -Fq 'Error:' <<< "$output"; then
+        printf '%s\n' "$output" >&2
+        return 1
+    fi
+    printf '%s\n' "$output"
 }

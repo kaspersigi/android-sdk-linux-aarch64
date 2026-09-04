@@ -100,8 +100,12 @@ archive="$dist_dir/android-sdk-linux.zip"
 rm -f -- "$archive" "$archive.sha256"
 (
     cd "$dist_dir"
-    find sdk -print | LC_ALL=C sort | zip -X -q -y "$archive" -@
+    export LC_ALL=C
+    export TZ=UTC
+    find sdk -exec touch -h -d '2008-01-01 00:00:00 UTC' {} +
+    find sdk -print | sort | zip -X -q -y "$archive" -@
 )
+python3 -B "$project_root/scripts/check-zip-metadata.py" "$archive"
 (
     cd "$dist_dir"
     archive_name="$(basename -- "$archive")"

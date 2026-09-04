@@ -10,20 +10,22 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+script_dir = str(Path(__file__).resolve().parent)
+if script_dir not in sys.path:
+    sys.path.insert(0, script_dir)
+from elf_validation import is_valid_elf_machine
 
-HOST_CONTENT_DIFFERENCES = {
+
+HOST_ELF_CONTENT_DIFFERENCES = {
     "build-tools/36.0.0/aapt",
     "build-tools/36.0.0/aapt2",
     "build-tools/36.0.0/aidl",
-    "build-tools/36.0.0/bcc_compat",
     "build-tools/36.0.0/dexdump",
-    "build-tools/36.0.0/llvm-rs-cc",
     "build-tools/36.0.0/split-select",
     "build-tools/36.0.0/zipalign",
-    "build-tools/36.0.0/lld-bin/lld",
     "build-tools/36.0.0/lib64/libc++.so",
     "build-tools/36.0.0/lib64/libc++.so.1",
-    "cmdline-tools/latest/bin/android",
     "cmake/3.22.1/bin/cmake",
     "cmake/3.22.1/bin/cpack",
     "cmake/3.22.1/bin/ctest",
@@ -41,6 +43,13 @@ HOST_CONTENT_DIFFERENCES = {
     "platform-tools/mke2fs",
     "platform-tools/sqlite3",
     "platform-tools/lib64/libc++.so",
+}
+
+HOST_SCRIPT_CONTENT_DIFFERENCES = {
+    "build-tools/36.0.0/bcc_compat",
+    "build-tools/36.0.0/llvm-rs-cc",
+    "build-tools/36.0.0/lld-bin/lld",
+    "cmdline-tools/latest/bin/android",
 }
 
 GENERATED_METADATA = {
@@ -155,20 +164,6 @@ def normalize_reference_link(value: str) -> str:
     )
 
 
-def elf_machine(path: Path) -> int | None:
-    with path.open("rb") as stream:
-        header = stream.read(20)
-    if len(header) < 20 or header[:4] != b"\x7fELF":
-        return None
-    if header[5] == 1:
-        byteorder = "little"
-    elif header[5] == 2:
-        byteorder = "big"
-    else:
-        return None
-    return int.from_bytes(header[18:20], byteorder)
-
-
 def is_rebuilt_ndk_host_elf_path(relative: str) -> bool:
     if any(
         relative.startswith(prefix + "/")
@@ -195,8 +190,12 @@ def files_equal(left: Path, right: Path) -> bool:
 def content_difference_is_expected(
     relative: str, reference: Entry, candidate: Entry
 ) -> bool:
+    if relative in HOST_ELF_CONTENT_DIFFERENCES:
+        return is_valid_elf_machine(
+            reference.source, 62
+        ) and is_valid_elf_machine(candidate.source, 183)
     if relative in (
-        HOST_CONTENT_DIFFERENCES
+        HOST_SCRIPT_CONTENT_DIFFERENCES
         | GENERATED_METADATA
         | NDK_HOST_SCRIPT_DIFFERENCES
         | NDK_HOST_GENERATED_CONTENT_FILES
@@ -212,8 +211,8 @@ def content_difference_is_expected(
     # runtime directories must remain byte-for-byte identical.
     return (
         is_rebuilt_ndk_host_elf_path(relative)
-        and elf_machine(reference.source) == 62
-        and elf_machine(candidate.source) == 183
+        and is_valid_elf_machine(reference.source, 62)
+        and is_valid_elf_machine(candidate.source, 183)
     )
 
 
