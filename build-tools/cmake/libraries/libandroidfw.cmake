@@ -59,6 +59,10 @@ target_include_directories(libandroidfw PUBLIC
     ${SRC}/incremental_delivery/incfs/kernel-headers
     )
 
+target_link_libraries(libandroidfw PRIVATE
+    png_static
+    )
+
 target_link_libraries(libandroidfw PUBLIC
     fmt::fmt
     libutils
