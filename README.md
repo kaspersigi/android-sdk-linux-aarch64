@@ -83,8 +83,9 @@ skipped.
 
 Validation also structurally parses every NDK host ELF position, checks every
 host ELF's package-local SONAME dependency closure, verifies the pinned member
-inventory and structure of all NDK host static libraries, loads each host C++
-runtime independently, and verifies that compiler-rt does not depend on a
+inventory and relocatable-object (`ET_REL`) structure of all NDK host static
+libraries, loads each host C++ runtime independently, and verifies that
+compiler-rt does not depend on a
 system `libstdc++.so`. It then uses the packaged Clang and LLD to link a C
 executable and C++ shared library for `aarch64-linux-android21`. These checks
 verify the downloaded producer artifact again after it has been integrated
@@ -92,6 +93,9 @@ into the complete SDK. The SDK-level gate also checks every explicit
 Build-Tools, CMake, Ninja, and Platform-Tools host ELF against the permitted
 GNU/Linux runtime dependency set (excluding system `libgcc_s.so.1`), verifies
 component libc++ SONAMEs, and loads all component libc++ runtimes independently.
+SDK-generated host wrapper scripts must exactly match their checked-in
+templates, while the nine patched NDK host scripts must remain byte-identical
+to the checksum-verified NDK archive from the selected latest full Release.
 
 ## Recommended environment
 

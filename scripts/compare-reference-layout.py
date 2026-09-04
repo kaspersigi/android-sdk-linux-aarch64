@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import stat
 import sys
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -50,6 +52,13 @@ HOST_SCRIPT_CONTENT_DIFFERENCES = {
     "build-tools/36.0.0/llvm-rs-cc",
     "build-tools/36.0.0/lld-bin/lld",
     "cmdline-tools/latest/bin/android",
+}
+
+HOST_SCRIPT_TEMPLATES = {
+    "build-tools/36.0.0/bcc_compat": "renderscript-unsupported",
+    "build-tools/36.0.0/llvm-rs-cc": "renderscript-unsupported",
+    "build-tools/36.0.0/lld-bin/lld": "build-tools-lld",
+    "cmdline-tools/latest/bin/android": "android-offline",
 }
 
 GENERATED_METADATA = {
@@ -123,6 +132,15 @@ NDK_HOST_SCRIPT_DIFFERENCES = {
     "ndk/27.3.13750724/ndk-which",
 }
 
+NDK_ROOT_PREFIX = "ndk/27.3.13750724/"
+NDK_RELEASE_ARCHIVE = Path(
+    os.environ.get(
+        "NDK_RELEASE_ARCHIVE",
+        Path(__file__).resolve().parents[1]
+        / ".cache/android-ndk-r27d-linux.zip",
+    )
+)
+
 
 @dataclass(frozen=True)
 class Entry:
@@ -187,6 +205,33 @@ def files_equal(left: Path, right: Path) -> bool:
                 return True
 
 
+def file_digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def ndk_release_script_matches(relative: str, candidate: Path) -> bool:
+    ndk_relative = relative.removeprefix(NDK_ROOT_PREFIX)
+    archive_member = f"android-ndk-r27d/{ndk_relative}"
+    try:
+        with zipfile.ZipFile(NDK_RELEASE_ARCHIVE) as archive:
+            matches = [
+                info for info in archive.infolist() if info.filename == archive_member
+            ]
+            if len(matches) != 1 or matches[0].is_dir():
+                return False
+            digest = hashlib.sha256()
+            with archive.open(matches[0]) as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+    except (OSError, zipfile.BadZipFile):
+        return False
+    return file_digest(candidate) == digest.hexdigest()
+
+
 def content_difference_is_expected(
     relative: str, reference: Entry, candidate: Entry
 ) -> bool:
@@ -194,12 +239,14 @@ def content_difference_is_expected(
         return is_valid_elf_machine(
             reference.source, 62
         ) and is_valid_elf_machine(candidate.source, 183)
-    if relative in (
-        HOST_SCRIPT_CONTENT_DIFFERENCES
-        | GENERATED_METADATA
-        | NDK_HOST_SCRIPT_DIFFERENCES
-        | NDK_HOST_GENERATED_CONTENT_FILES
-    ):
+    if relative in HOST_SCRIPT_CONTENT_DIFFERENCES:
+        template = Path(__file__).resolve().parents[1] / "templates" / (
+            HOST_SCRIPT_TEMPLATES[relative]
+        )
+        return files_equal(template, candidate.source)
+    if relative in NDK_HOST_SCRIPT_DIFFERENCES:
+        return ndk_release_script_matches(relative, candidate.source)
+    if relative in GENERATED_METADATA | NDK_HOST_GENERATED_CONTENT_FILES:
         return True
     if any(
         relative == prefix or relative.startswith(prefix + "/")
@@ -292,8 +339,20 @@ def main() -> int:
             continue
         left = reference[relative].source
         right = candidate[relative].source
-        if not files_equal(left, right) and not content_difference_is_expected(
-            relative, reference[relative], candidate[relative]
+        requires_explicit_content = relative in (
+            HOST_SCRIPT_CONTENT_DIFFERENCES | NDK_HOST_SCRIPT_DIFFERENCES
+        )
+        if (
+            requires_explicit_content
+            and not content_difference_is_expected(
+                relative, reference[relative], candidate[relative]
+            )
+        ) or (
+            not requires_explicit_content
+            and not files_equal(left, right)
+            and not content_difference_is_expected(
+                relative, reference[relative], candidate[relative]
+            )
         ):
             content_mismatches.append(relative)
 

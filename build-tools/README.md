@@ -26,7 +26,9 @@ every imported top-level source tree, and every build verifies those digests
 before compiling. The digest records Git-stable regular-file and symlink entry
 types plus executable bits, rather than checkout permissions affected by the
 user's `umask`; empty directories are intentionally excluded because Git does
-not store them. Validation also rejects ignored source files that would be
+not store them. The `src/` root may contain only the 23 manifest-listed module
+directories; a loose top-level file or symlink is rejected instead of falling
+outside the snapshot. Validation also rejects ignored source files that would be
 absent from a fresh checkout. Only the source files and shared library projects
 needed by the six executable targets are included here.
 

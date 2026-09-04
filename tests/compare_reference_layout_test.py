@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -113,6 +114,64 @@ class NdkHostElfDifferenceTest(unittest.TestCase):
         self.assertFalse(
             content_difference_is_expected(relative, self.expected, self.actual)
         )
+
+
+class HostScriptDifferenceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        root = Path(self.temporary_directory.name)
+        self.reference = root / "reference"
+        self.candidate = root / "candidate"
+        self.reference.write_text("official x86_64 script\n", encoding="utf-8")
+
+    def tearDown(self) -> None:
+        self.temporary_directory.cleanup()
+
+    def entry(self, path: Path) -> Entry:
+        return Entry("file", path, 0o755)
+
+    def test_sdk_script_must_equal_its_checked_in_template(self) -> None:
+        relative = "build-tools/36.0.0/bcc_compat"
+        template = PROJECT_ROOT / "templates/renderscript-unsupported"
+        self.candidate.write_bytes(template.read_bytes())
+        self.assertTrue(
+            content_difference_is_expected(
+                relative, self.entry(self.reference), self.entry(self.candidate)
+            )
+        )
+        self.candidate.write_bytes(b"")
+        self.assertFalse(
+            content_difference_is_expected(
+                relative, self.entry(self.reference), self.entry(self.candidate)
+            )
+        )
+
+    def test_ndk_script_rejects_unpinned_content(self) -> None:
+        archive = Path(self.temporary_directory.name) / "ndk.zip"
+        with zipfile.ZipFile(archive, "w") as output:
+            output.writestr("android-ndk-r27d/ndk-gdb", b"release script\n")
+        function_globals = content_difference_is_expected.__globals__
+        original_archive = function_globals["NDK_RELEASE_ARCHIVE"]
+        function_globals["NDK_RELEASE_ARCHIVE"] = archive
+        try:
+            self.candidate.write_bytes(b"release script\n")
+            self.assertTrue(
+                content_difference_is_expected(
+                    "ndk/27.3.13750724/ndk-gdb",
+                    self.entry(self.reference),
+                    self.entry(self.candidate),
+                )
+            )
+            self.candidate.write_bytes(b"")
+            self.assertFalse(
+                content_difference_is_expected(
+                    "ndk/27.3.13750724/ndk-gdb",
+                    self.entry(self.reference),
+                    self.entry(self.candidate),
+                )
+            )
+        finally:
+            function_globals["NDK_RELEASE_ARCHIVE"] = original_archive
 
 
 class TypeMismatchTest(unittest.TestCase):

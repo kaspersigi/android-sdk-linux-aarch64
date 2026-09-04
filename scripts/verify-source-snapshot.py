@@ -100,11 +100,16 @@ def ignored_source_paths() -> list[str]:
     ]
 
 
-def calculate() -> dict[str, str]:
-    modules = sorted(
-        (path for path in SOURCE_ROOT.iterdir() if path.is_dir()),
-        key=lambda path: os.fsencode(path.name),
-    )
+def calculate(source_root: Path = SOURCE_ROOT) -> dict[str, str]:
+    entries = sorted(source_root.iterdir(), key=lambda path: os.fsencode(path.name))
+    unexpected = [path for path in entries if path.is_symlink() or not path.is_dir()]
+    if unexpected:
+        paths = ", ".join(path.name for path in unexpected)
+        raise ValueError(
+            "Build-Tools source root may contain only module directories; "
+            f"unexpected entries: {paths}"
+        )
+    modules = entries
     return {f"src/{module.name}": tree_digest(module) for module in modules}
 
 
@@ -140,13 +145,21 @@ def main() -> int:
             print(f"... {len(ignored) - 100} more ignored source paths", file=sys.stderr)
         return 1
 
-    actual = calculate()
+    try:
+        actual = calculate()
+    except (OSError, ValueError) as error:
+        print(f"cannot calculate Build-Tools source snapshot: {error}", file=sys.stderr)
+        return 1
     if args.print_manifest:
         for relative, digest in actual.items():
             print(f"{digest}  {relative}")
         return 0
 
-    expected = read_manifest()
+    try:
+        expected = read_manifest()
+    except (OSError, ValueError) as error:
+        print(f"cannot read Build-Tools source manifest: {error}", file=sys.stderr)
+        return 1
     if expected != actual:
         for relative in sorted(expected.keys() | actual.keys(), key=os.fsencode):
             if expected.get(relative) != actual.get(relative):
