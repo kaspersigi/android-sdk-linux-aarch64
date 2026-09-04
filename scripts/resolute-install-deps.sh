@@ -20,7 +20,7 @@ else
 fi
 
 host_packages=(
-    binutils-aarch64-linux-gnu ca-certificates cmake curl file gawk
+    binutils binutils-aarch64-linux-gnu ca-certificates cmake curl file gawk
     g++-aarch64-linux-gnu gcc-aarch64-linux-gnu ninja-build
     openjdk-21-jdk-headless pkg-config python3
     qemu-user-binfmt tar unzip zip

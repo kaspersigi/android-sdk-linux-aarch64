@@ -2,10 +2,81 @@
 # SPDX-License-Identifier: Apache-2.0
 
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/common.sh"
 
 sdk="${1:-$dist_dir/sdk}"
 [[ -d "$sdk" ]] || die "SDK directory does not exist: $sdk"
+sdk="$(realpath -e -- "$sdk")"
+reference="${REFERENCE_DIR:-$build_dir/reference-sdk}"
+[[ -d "$reference" ]] || die "SDK reference directory does not exist: $reference"
+reference="$(realpath -e -- "$reference")"
+[[ "$reference" != "$sdk" ]] ||
+    die "SDK reference and candidate resolve to the same directory: $sdk"
+
+candidate_has_ndk=0
+[[ -d "$sdk/ndk/$SDK_NDK_VERSION" ]] && candidate_has_ndk=1
+
+require_x86_64_reference_elf() {
+    local path="$1" kind
+    [[ -f "$path" ]] || die "required x86_64 reference file is missing: $path"
+    kind="$(file -b -- "$path")"
+    [[ "$kind" == ELF* && "$kind" == *x86-64* ]] ||
+        die "SDK reference is not the official Linux x86_64 layout: $path: $kind"
+}
+
+for relative in \
+    build-tools/36.0.0/aapt \
+    cmake/3.22.1/bin/cmake \
+    cmake/4.1.2/bin/cmake \
+    cmdline-tools/latest/bin/android \
+    platform-tools/adb; do
+    require_x86_64_reference_elf "$reference/$relative"
+done
+
+if (( candidate_has_ndk )); then
+    [[ -d "$reference/ndk/$SDK_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64" ]] ||
+        die "SDK reference does not contain the pinned Linux x86_64 NDK"
+    [[ ! -e "$reference/ndk/$SDK_NDK_VERSION/toolchains/llvm/prebuilt/linux-aarch64" ]] ||
+        die "SDK reference unexpectedly contains a Linux AArch64 NDK host tree"
+fi
+
+expected_reference_entries=31095
+if (( ! candidate_has_ndk )); then
+    expected_reference_entries=21816
+fi
+if [[ -e "$reference/.knownPackages" || -L "$reference/.knownPackages" ]]; then
+    [[ -f "$reference/.knownPackages" && ! -L "$reference/.knownPackages" ]] ||
+        die "SDK reference .knownPackages entry is not a regular file"
+    ((expected_reference_entries += 1))
+fi
+if (( candidate_has_ndk )); then
+    actual_reference_entries=$(find "$reference" -mindepth 1 -printf . | wc -c)
+else
+    actual_reference_entries=$(
+        find "$reference" -mindepth 1 \
+            \( -path "$reference/ndk" -o -path "$reference/ndk/*" \) -prune -o \
+            -printf . | wc -c
+    )
+fi
+[[ "$actual_reference_entries" == "$expected_reference_entries" ]] ||
+    die "SDK reference entry count mismatch: expected $expected_reference_entries, got $actual_reference_entries"
+! find "$reference" -type f \( -name '*.pyc' -o -name '*.pyo' \) \
+    -print -quit | grep -q . || die "SDK reference contains generated Python bytecode"
+! find "$reference" -type d -name __pycache__ -not -empty \
+    -print -quit | grep -q . || die "SDK reference contains a non-empty Python cache directory"
+
+archive="$dist_dir/android-sdk-linux.zip"
+(( candidate_has_ndk )) || archive="$dist_dir/android-sdk-linux-without-ndk.zip"
+checksum="$archive.sha256"
+[[ -f "$archive" ]] || die "SDK archive does not exist: $archive"
+[[ -f "$checksum" ]] || die "SDK archive checksum does not exist: $checksum"
+(
+    cd "$(dirname -- "$archive")"
+    sha256sum --check "$(basename -- "$checksum")"
+)
+
+python3 -B "$project_root/tests/compare_reference_layout_test.py"
 
 grep -Fqx "Pkg.Revision=$SDK_BUILD_TOOLS_VERSION" \
     "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/source.properties"
@@ -15,6 +86,51 @@ grep -Fqx "Pkg.Revision=$SDK_CMDLINE_TOOLS_VERSION" \
     "$sdk/cmdline-tools/latest/source.properties"
 grep -Fqx 'Pkg.Revision = 3.22.1' "$sdk/cmake/3.22.1/source.properties"
 grep -Fqx 'Pkg.Revision = 4.1.2' "$sdk/cmake/4.1.2/source.properties"
+
+ndk=""
+ndk_toolchain=""
+ndk_host_elf_count=0
+scan_ndk_host_elfs() {
+    local root="$1" scope="$2" path kind
+    local -a find_args=("$root")
+
+    [[ -d "$root" ]] || die "required NDK host directory is missing: $root"
+    if [[ "$scope" == "shallow" ]]; then
+        find_args+=(-maxdepth 1)
+    fi
+    while IFS= read -r -d '' path; do
+        kind="$(file -b -- "$path")"
+        [[ "$kind" == ELF* ]] || continue
+        [[ "$kind" == *'ARM aarch64'* || "$kind" == *AArch64* ]] ||
+            die "non-AArch64 ELF in an NDK host position: $path: $kind"
+        ((ndk_host_elf_count += 1))
+    done < <(find "${find_args[@]}" -type f -print0)
+}
+
+if [[ -d "$sdk/ndk/$SDK_NDK_VERSION" ]]; then
+    ndk="$sdk/ndk/$SDK_NDK_VERSION"
+    ndk_toolchain="$ndk/toolchains/llvm/prebuilt/linux-aarch64"
+    grep -Fqx "Pkg.Revision = $SDK_NDK_VERSION" \
+        "$ndk/source.properties" ||
+        die "NDK does not report pinned revision $SDK_NDK_VERSION"
+    grep -Fqx 'Pkg.ReleaseName = r27d' \
+        "$ndk/source.properties" ||
+        die "NDK does not report pinned release name r27d"
+
+    scan_ndk_host_elfs "$ndk_toolchain/bin" recursive
+    scan_ndk_host_elfs "$ndk_toolchain/python3" recursive
+    scan_ndk_host_elfs "$ndk_toolchain/lib/python3.11" recursive
+    scan_ndk_host_elfs "$ndk/prebuilt/linux-aarch64/bin" recursive
+    scan_ndk_host_elfs "$ndk/shader-tools/linux-aarch64" recursive
+    scan_ndk_host_elfs "$ndk/simpleperf/bin/linux/aarch64" recursive
+    scan_ndk_host_elfs "$ndk_toolchain/lib" shallow
+    scan_ndk_host_elfs "$ndk_toolchain/lib/aarch64-unknown-linux-gnu" shallow
+    scan_ndk_host_elfs \
+        "$ndk_toolchain/lib/clang/18/lib/aarch64-unknown-linux-gnu" shallow
+    scan_ndk_host_elfs "$ndk_toolchain/musl/lib" shallow
+    (( ndk_host_elf_count > 0 )) || die "no NDK host ELF files were found"
+    echo "ndk_aarch64_host_elfs=$ndk_host_elf_count"
+fi
 
 host_elfs=(
     build-tools/36.0.0/aapt
@@ -78,12 +194,9 @@ while IFS= read -r -d '' path; do
     esac
 done < <(find "$sdk" -type f -print0)
 
-reference="${REFERENCE_DIR:-/mnt/develop/android/sdk}"
-if [[ -d "$reference" ]]; then
-    compare_args=()
-    [[ -d "$sdk/ndk/$SDK_NDK_VERSION" ]] || compare_args+=(--without-ndk)
-    "$script_dir/compare-reference-layout.py" "${compare_args[@]}" "$reference" "$sdk"
-fi
+compare_args=()
+[[ -d "$sdk/ndk/$SDK_NDK_VERSION" ]] || compare_args+=(--without-ndk)
+"$script_dir/compare-reference-layout.py" "${compare_args[@]}" "$reference" "$sdk"
 
 runner=()
 case "$(uname -m)" in
@@ -119,7 +232,16 @@ run_arm64 "$sdk/build-tools/36.0.0/aapt2" version
 run_arm64 "$sdk/build-tools/36.0.0/aapt" version
 run_arm64 "$sdk/build-tools/36.0.0/aidl" --help >/dev/null 2>&1
 run_arm64 "$sdk/build-tools/36.0.0/split-select" --help >/dev/null 2>&1
-run_arm64 "$sdk/platform-tools/adb" version
+platform_tools_version="$(run_arm64 "$sdk/platform-tools/adb" version)"
+printf '%s\n' "$platform_tools_version"
+grep -Fq "Version $SDK_PLATFORM_TOOLS_PUBLIC_SOURCE_VERSION-" \
+    <<< "$platform_tools_version" ||
+    die "adb does not report pinned public source version $SDK_PLATFORM_TOOLS_PUBLIC_SOURCE_VERSION"
+fastboot_version="$(run_arm64 "$sdk/platform-tools/fastboot" --version)"
+printf '%s\n' "$fastboot_version"
+grep -Fq "fastboot version $SDK_PLATFORM_TOOLS_PUBLIC_SOURCE_VERSION-" \
+    <<< "$fastboot_version" ||
+    die "fastboot does not report pinned public source version $SDK_PLATFORM_TOOLS_PUBLIC_SOURCE_VERSION"
 
 probe="$(mktemp -d)"
 known_packages="$sdk/.knownPackages"
@@ -138,6 +260,26 @@ cleanup_probe() {
 }
 trap cleanup_probe EXIT
 mkdir -p -- "$probe/res/values" "$probe/compiled" "$probe/dex"
+
+if [[ -n "$ndk_toolchain" ]]; then
+    run_arm64 "$ndk_toolchain/bin/clang" --version
+    run_arm64 "$ndk_toolchain/bin/ld.lld" --version
+    printf '%s\n' 'int main(void) { return 0; }' > "$probe/ndk-smoke.c"
+    printf '%s\n' 'extern "C" int sdk_ndk_smoke() { return 0; }' > \
+        "$probe/ndk-smoke.cpp"
+    run_arm64 "$ndk_toolchain/bin/clang" \
+        --target=aarch64-linux-android21 \
+        --sysroot="$ndk_toolchain/sysroot" \
+        -fuse-ld=lld "$probe/ndk-smoke.c" -o "$probe/ndk-smoke"
+    run_arm64 "$ndk_toolchain/bin/clang++" \
+        --target=aarch64-linux-android21 \
+        --sysroot="$ndk_toolchain/sysroot" \
+        -fuse-ld=lld -fPIC -shared -stdlib=libc++ -static-libstdc++ \
+        "$probe/ndk-smoke.cpp" -o "$probe/libndk-smoke.so"
+    require_aarch64_elf "$probe/ndk-smoke"
+    require_aarch64_elf "$probe/libndk-smoke.so"
+fi
+
 printf '%s\n' '<resources><string name="app_name">SDK probe</string></resources>' > \
     "$probe/res/values/strings.xml"
 printf '%s\n' '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.sdk.probe"><application android:label="@string/app_name"/></manifest>' > \
@@ -195,11 +337,26 @@ if "$sdk/cmdline-tools/latest/bin/android" >/dev/null 2>&1; then
     die "offline android launcher unexpectedly succeeded"
 fi
 
-archive="$dist_dir/android-sdk-linux.zip"
-[[ -d "$sdk/ndk/$SDK_NDK_VERSION" ]] ||
-    archive="$dist_dir/android-sdk-linux-without-ndk.zip"
-unzip -t "$archive" >/dev/null
 cleanup_probe
+trap - EXIT
+
+archive_probe="$(mktemp -d)"
+cleanup_archive_probe() {
+    rm -rf -- "$archive_probe"
+}
+trap cleanup_archive_probe EXIT
+unzip -t "$archive" >/dev/null
+unzip -q "$archive" -d "$archive_probe"
+mapfile -d '' -t archive_roots < <(
+    find "$archive_probe" -mindepth 1 -maxdepth 1 -print0
+)
+if (( ${#archive_roots[@]} != 1 )) ||
+   [[ "${archive_roots[0]}" != "$archive_probe/sdk" ]] ||
+   [[ ! -d "$archive_probe/sdk" ]] || [[ -L "$archive_probe/sdk" ]]; then
+    die "archive must contain exactly one top-level sdk/ directory"
+fi
+python3 "$script_dir/compare-extracted-tree.py" "$sdk" "$archive_probe/sdk"
+cleanup_archive_probe
 trap - EXIT
 
 echo "Validated fixed Android SDK layout and Linux AArch64 host architecture."

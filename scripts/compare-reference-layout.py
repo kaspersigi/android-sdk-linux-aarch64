@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -66,9 +67,39 @@ NDK_HOST_PREFIXES = (
     ("simpleperf/bin/linux/x86_64", "simpleperf/bin/linux/aarch64"),
 )
 
-NDK_HOST_CONTENT_PREFIXES = tuple(
-    f"ndk/27.3.13750724/{target}" for _, target in NDK_HOST_PREFIXES
+NDK_HOST_GENERATED_CONTENT_PREFIXES = (
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "lib/aarch64-unknown-linux-gnu",
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "lib/clang/18/lib/aarch64-unknown-linux-gnu",
 )
+
+NDK_HOST_GENERATED_CONTENT_FILES = {
+    "ndk/27.3.13750724/prebuilt/linux-aarch64/lib/libyasm.a",
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/lib/libbolt_rt_instr.a",
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "python3/include/python3.11/pyconfig.h",
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "python3/lib/pkgconfig/python-3.11-embed.pc",
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "python3/lib/pkgconfig/python-3.11.pc",
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "python3/lib/python3.11/_sysconfigdata__linux_aarch64-linux-gnu.py",
+}
+
+NDK_HOST_ELF_CONTENT_PREFIXES = (
+    "ndk/27.3.13750724/prebuilt/linux-aarch64/bin",
+    "ndk/27.3.13750724/shader-tools/linux-aarch64",
+    "ndk/27.3.13750724/simpleperf/bin/linux/aarch64",
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/bin",
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/python3",
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/lib/python3.11",
+)
+
+NDK_HOST_ELF_CONTENT_DIRECTORIES = {
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/lib",
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/musl/lib",
+}
 
 NDK_HOST_SCRIPT_DIFFERENCES = {
     "ndk/27.3.13750724/build/cmake/android-legacy.toolchain.cmake",
@@ -87,6 +118,7 @@ NDK_HOST_SCRIPT_DIFFERENCES = {
 class Entry:
     kind: str
     source: Path
+    mode: int
     link: str | None = None
 
 
@@ -122,12 +154,65 @@ def normalize_reference_link(value: str) -> str:
     )
 
 
-def content_difference_is_expected(relative: str) -> bool:
-    if relative in HOST_CONTENT_DIFFERENCES | GENERATED_METADATA | NDK_HOST_SCRIPT_DIFFERENCES:
+def elf_machine(path: Path) -> int | None:
+    with path.open("rb") as stream:
+        header = stream.read(20)
+    if len(header) < 20 or header[:4] != b"\x7fELF":
+        return None
+    if header[5] == 1:
+        byteorder = "little"
+    elif header[5] == 2:
+        byteorder = "big"
+    else:
+        return None
+    return int.from_bytes(header[18:20], byteorder)
+
+
+def is_rebuilt_ndk_host_elf_path(relative: str) -> bool:
+    if any(
+        relative.startswith(prefix + "/")
+        for prefix in NDK_HOST_ELF_CONTENT_PREFIXES
+    ):
         return True
-    return any(
+    parent, separator, _ = relative.rpartition("/")
+    return bool(separator) and parent in NDK_HOST_ELF_CONTENT_DIRECTORIES
+
+
+def files_equal(left: Path, right: Path) -> bool:
+    if left.stat().st_size != right.stat().st_size:
+        return False
+    with left.open("rb") as left_stream, right.open("rb") as right_stream:
+        while True:
+            left_chunk = left_stream.read(1024 * 1024)
+            right_chunk = right_stream.read(1024 * 1024)
+            if left_chunk != right_chunk:
+                return False
+            if not left_chunk:
+                return True
+
+
+def content_difference_is_expected(
+    relative: str, reference: Entry, candidate: Entry
+) -> bool:
+    if relative in (
+        HOST_CONTENT_DIFFERENCES
+        | GENERATED_METADATA
+        | NDK_HOST_SCRIPT_DIFFERENCES
+        | NDK_HOST_GENERATED_CONTENT_FILES
+    ):
+        return True
+    if any(
         relative == prefix or relative.startswith(prefix + "/")
-        for prefix in NDK_HOST_CONTENT_PREFIXES
+        for prefix in NDK_HOST_GENERATED_CONTENT_PREFIXES
+    ):
+        return True
+    # A machine transition is valid only in an explicitly identified NDK host
+    # position. Android target ELFs below the host-tagged sysroot and Clang
+    # runtime directories must remain byte-for-byte identical.
+    return (
+        is_rebuilt_ndk_host_elf_path(relative)
+        and elf_machine(reference.source) == 62
+        and elf_machine(candidate.source) == 183
     )
 
 
@@ -139,6 +224,7 @@ def inventory(
         relative = path.relative_to(root).as_posix()
         if without_ndk and (relative == "ndk" or relative.startswith("ndk/")):
             continue
+        mode = stat.S_IMODE(os.lstat(path).st_mode)
         if path.is_symlink():
             link = os.readlink(path)
             if normalize_reference:
@@ -155,7 +241,7 @@ def inventory(
             kind = "other"
         if normalize_reference:
             relative = normalize_reference_name(relative)
-        result[relative] = Entry(kind=kind, source=path, link=link)
+        result[relative] = Entry(kind=kind, source=path, mode=mode, link=link)
     return result
 
 
@@ -181,6 +267,16 @@ def main() -> int:
         and reference[path].link != candidate[path].link
     )
 
+    # sdkmanager-created local trees follow the user's collaborative umask and
+    # commonly add group-write permission (0775/0664). Normalize only that
+    # installation-policy bit; all other permission bits must match exactly.
+    mode_mismatches = sorted(
+        path for path in set(reference) & set(candidate)
+        if reference[path].kind == candidate[path].kind
+        and (reference[path].mode & ~stat.S_IWGRP)
+        != (candidate[path].mode & ~stat.S_IWGRP)
+    )
+
     expected_missing = sorted(
         path for path in INTENTIONAL_MISSING if path in reference
     )
@@ -188,16 +284,17 @@ def main() -> int:
     missing_not_observed = sorted(set(expected_missing) - set(missing))
 
     content_mismatches: list[str] = []
-    executable_mismatches: list[str] = []
     for relative in sorted(set(reference) & set(candidate)):
-        if reference[relative].kind != "file" or content_difference_is_expected(relative):
+        if reference[relative].kind != candidate[relative].kind:
+            continue
+        if reference[relative].kind != "file":
             continue
         left = reference[relative].source
         right = candidate[relative].source
-        if left.read_bytes() != right.read_bytes():
+        if not files_equal(left, right) and not content_difference_is_expected(
+            relative, reference[relative], candidate[relative]
+        ):
             content_mismatches.append(relative)
-        if bool(os.stat(left).st_mode & 0o111) != bool(os.stat(right).st_mode & 0o111):
-            executable_mismatches.append(relative)
 
     print(f"reference_entries={len(reference)}")
     print(f"candidate_entries={len(candidate)}")
@@ -208,7 +305,7 @@ def main() -> int:
     print(f"type_mismatches={len(mismatched_types)}")
     print(f"link_mismatches={len(link_mismatches)}")
     print(f"content_mismatches={len(content_mismatches)}")
-    print(f"executable_mismatches={len(executable_mismatches)}")
+    print(f"mode_mismatches={len(mode_mismatches)}")
 
     problems = {
         "unexpected missing": unexpected_missing,
@@ -216,8 +313,8 @@ def main() -> int:
         "extra": extra,
         "type mismatch": mismatched_types,
         "link mismatch": link_mismatches,
+        "mode mismatch": mode_mismatches,
         "content mismatch": content_mismatches,
-        "executable mismatch": executable_mismatches,
     }
     for label, paths in problems.items():
         for path in paths[:50]:

@@ -19,8 +19,16 @@ Ubuntu 26.04 produces AArch64 executables with the glibc interpreter
 
 The source snapshot was imported on 2026-09-04 from the local Android 16 QSSI
 tree at `/mnt/develop/linux/build-tools/LA.QSSI.16.0/LINUX/android`, build ID
-`BQ2A.250610.001-BP2A.250605.031.A3`. Only the source files and shared library
-projects needed by the six executable targets are included here.
+`BQ2A.250610.001-BP2A.250605.031.A3`. The original per-project Git metadata was
+not retained, so individual upstream commit IDs cannot be reconstructed from
+this trimmed import. `SOURCE_TREE_SHA256` records a deterministic digest for
+every imported top-level source tree, and every build verifies those digests
+before compiling. The digest records Git-stable regular-file and symlink entry
+types plus executable bits, rather than checkout permissions affected by the
+user's `umask`; empty directories are intentionally excluded because Git does
+not store them. Validation also rejects ignored source files that would be
+absent from a fresh checkout. Only the source files and shared library projects
+needed by the six executable targets are included here.
 
 The CMake target descriptions were adapted from the Apache-2.0
 `lzhiyong/android-sdk-tools` and `soobujmiah/adt` standalone-build work. GNU

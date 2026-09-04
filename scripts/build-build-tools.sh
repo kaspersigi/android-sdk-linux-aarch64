@@ -16,6 +16,7 @@ done
 
 [[ -f "$source_root/CMakeLists.txt" ]] ||
     die "embedded Build-Tools source is missing: $source_root"
+python3 "$script_dir/verify-source-snapshot.py"
 
 rm -rf -- "$cmake_build" "$output"
 mkdir -p -- "$output"

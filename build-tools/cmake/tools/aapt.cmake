@@ -3,7 +3,7 @@
 set(INCLUDES
     ${SRC}/base/libs/androidfw/include
     ${SRC}/base/libs/androidfw/include_pathutils
-    ${SRC}/expat/lib
+    ${SRC}/expat/expat/lib
     ${SRC}/fmtlib/include
     ${SRC}/libpng
     ${SRC}/libbase/include

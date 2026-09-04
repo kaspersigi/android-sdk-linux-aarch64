@@ -28,15 +28,6 @@ copy_google_package "$cache_dir/$GOOGLE_CMAKE_3_ARCHIVE" \
 copy_google_package "$cache_dir/$GOOGLE_CMAKE_4_ARCHIVE" \
     "cmake;4.1.2" "$sdk/cmake/4.1.2"
 
-write_generic_package_xml() {
-    local output="$1" path="$2" major="$3" minor="$4" micro="$5" display="$6"
-    sed -e "s|@PATH@|$path|g" -e "s|@MAJOR@|$major|g" \
-        -e "s|@MINOR@|$minor|g" -e "s|@MICRO@|$micro|g" \
-        -e "s|@DISPLAY@|$display|g" \
-        "$project_root/templates/package-generic.xml.in" > "$output"
-    chmod 0644 "$output"
-}
-
 write_generic_package_xml "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/package.xml" \
     "build-tools;$SDK_BUILD_TOOLS_VERSION" 36 0 0 "Android SDK Build-Tools 36 Linux AArch64"
 write_generic_package_xml "$sdk/cmake/3.22.1/package.xml" \
@@ -47,7 +38,7 @@ install -m 0644 "$project_root/templates/package-platform.xml.in" \
     "$sdk/platforms/$SDK_PLATFORM_VERSION/package.xml"
 
 temporary="$(mktemp -d)"
-unzip -q "$cache_dir/platform-tools_r37.0.1-linux.zip" -d "$temporary"
+unzip -q "$cache_dir/$PLATFORM_TOOLS_RELEASE_ASSET" -d "$temporary"
 [[ -d "$temporary/platform-tools" ]] || die "unexpected Platform-Tools archive layout"
 cp -a -- "$temporary/platform-tools" "$sdk/platform-tools"
 rm -rf -- "$temporary"
@@ -82,7 +73,7 @@ install -m 0755 "$project_root/templates/android-offline" \
 # RenderScript host tools and deliberately have no fake replacements.
 mkdir -p -- "$bt/lib64" "$bt/lld-bin"
 install -m 0755 "$sdk/platform-tools/lib64/libc++.so" "$bt/lib64/libc++.so"
-install -m 0755 "$sdk/platform-tools/lib64/libc++.so" "$bt/lib64/libc++.so.1"
+install -m 0644 "$sdk/platform-tools/lib64/libc++.so" "$bt/lib64/libc++.so.1"
 install -m 0755 "$project_root/templates/build-tools-lld" "$bt/lld-bin/lld"
 
 if (( include_ndk )); then
@@ -104,6 +95,12 @@ printf '\n%s' '24333f8a63b6825ea9c5514f83c2829b004d1fee' > \
     "$sdk/licenses/android-sdk-license"
 chmod 0644 "$sdk/licenses/android-sdk-license"
 
+# sdkmanager normalizes installed package permissions according to the user's
+# umask. Use the equivalent non-group-writable canonical modes in the archive.
+find "$sdk" -type d -exec chmod 0755 {} +
+find "$sdk" -type f -perm /0111 -exec chmod 0755 {} +
+find "$sdk" -type f ! -perm /0111 -exec chmod 0644 {} +
+
 archive="$dist_dir/android-sdk-linux.zip"
 if (( ! include_ndk )); then
     archive="$dist_dir/android-sdk-linux-without-ndk.zip"
@@ -111,7 +108,7 @@ fi
 rm -f -- "$archive" "$archive.sha256"
 (
     cd "$dist_dir"
-    find sdk -print | LC_ALL=C sort | zip -X -q "$archive" -@
+    find sdk -print | LC_ALL=C sort | zip -X -q -y "$archive" -@
 )
 (
     cd "$dist_dir"

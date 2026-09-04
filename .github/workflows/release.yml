@@ -18,6 +18,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Cache official x86_64 SDK reference archives
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            .cache/reference-platform-tools_r37.0.1-linux.zip
+            .cache/reference-android-ndk-r27d-linux.zip
+          key: android-sdk-x86_64-reference-${{ hashFiles('sources.lock') }}
       - name: Reclaim runner disk space
         run: |
           df -h /
@@ -28,6 +35,7 @@ jobs:
       - name: Build, validate, and package
         env:
           JOBS: "4"
+          GITHUB_TOKEN: ${{ github.token }}
         run: ./scripts/resolute-local-build.sh
       - name: Show final disk usage
         if: always()

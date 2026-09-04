@@ -17,7 +17,7 @@ set(INCLUDES
     ${SRC}/base/tools/aapt2
     ${SRC}/protobuf/src
     ${SRC}/logging/liblog/include
-    ${SRC}/expat/lib
+    ${SRC}/expat/expat/lib
     ${SRC}/fmtlib/include
     ${SRC}/native/include
     ${SRC}/libpng

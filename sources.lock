@@ -1,10 +1,14 @@
-# Fixed SDK component versions and immutable external archives.
+# Fixed SDK component/source versions and immutable third-party archives.
+# The two community AArch64 producer repositories are intentionally selected by
+# their latest published full Release; their v* tags describe build-script
+# revisions, not Android component versions.
 
 SDK_BUILD_TOOLS_VERSION=36.0.0
 SDK_PLATFORM_VERSION=android-36
 SDK_CMDLINE_TOOLS_VERSION=22.0
 SDK_NDK_VERSION=27.3.13750724
 SDK_PLATFORM_TOOLS_VERSION=37.0.1
+SDK_PLATFORM_TOOLS_PUBLIC_SOURCE_VERSION=37.0.0
 
 GOOGLE_BASE_URL=https://dl.google.com/android/repository
 
@@ -32,9 +36,19 @@ NINJA_1_10_SOURCE_SHA256=ce35865411f0490368a8fc383f29071de6690cbadc2770473497822
 NINJA_1_12_AARCH64_URL=https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux-aarch64.zip
 NINJA_1_12_AARCH64_SHA256=5c25c6570b0155e95fce5918cb95f1ad9870df5768653afe128db822301a05a1
 
-PLATFORM_TOOLS_URL=https://github.com/kaspersigi/platform-tools_r37.0.1-linux-aarch64/releases/download/v1.0.0/platform-tools_r37.0.1-linux.zip
-PLATFORM_TOOLS_SHA256=b5b3cd48354524714dd6ee20eadc323b36c9ba8d09a1a744d4762b588c98bbac
+PLATFORM_TOOLS_RELEASE_REPOSITORY=kaspersigi/platform-tools_r37.0.1-linux-aarch64
+PLATFORM_TOOLS_RELEASE_ASSET=platform-tools_r37.0.1-linux.zip
+PLATFORM_TOOLS_RELEASE_CHECKSUM_ASSET=platform-tools_r37.0.1-linux.zip.sha256
 
+NDK_RELEASE_REPOSITORY=kaspersigi/android-ndk-r27d-linux-aarch64
 NDK_RELEASE_ASSET=android-ndk-r27d-linux.zip
-NDK_RELEASE_URL=https://github.com/kaspersigi/android-ndk-r27d-linux-aarch64/releases/download/v1.0.1/android-ndk-r27d-linux.zip
-NDK_RELEASE_SHA256=462fe885d5ca01928eeb8cd93721a688d84c05dbc42bf179893d4b0c8fbbacf9
+NDK_RELEASE_CHECKSUM_ASSET=android-ndk-r27d-linux.zip.sha256
+
+# Official Linux x86_64 archives used to construct a fresh complete SDK
+# reference tree for every default build.
+REFERENCE_PLATFORM_TOOLS_ARCHIVE=platform-tools_r37.0.1-linux.zip
+REFERENCE_PLATFORM_TOOLS_URL=https://dl.google.com/android/repository/platform-tools_r37.0.1-linux.zip
+REFERENCE_PLATFORM_TOOLS_SHA256=d230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1
+REFERENCE_NDK_ARCHIVE=android-ndk-r27d-linux.zip
+REFERENCE_NDK_URL=https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
+REFERENCE_NDK_SHA256=601246087a682d1944e1e16dd85bc6e49560fe8b6d61255be2829178c8ed15d9

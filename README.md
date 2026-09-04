@@ -8,13 +8,51 @@ version set mirrors `/mnt/develop/android/sdk`:
 - Command-line Tools 22.0
 - CMake 3.22.1 with Ninja 1.10.2
 - CMake 4.1.2 with Ninja 1.12.1
-- Platform-Tools 37.0.1
+- Platform-Tools 37.0.1 package layout, rebuilt from the locked public 37.0.0
+  source line
 - NDK 27.3.13750724 (r27d)
 
 The assembled directory is `dist/sdk`. The final archive is
 `dist/android-sdk-linux.zip` and has one top-level `sdk/` directory.
 The installed SDK is fixed and offline-capable: assembly does not invoke
 `sdkmanager`, and consumers do not need it to download or update components.
+
+## Repository dependencies
+
+This repository is the integration layer. NDK and Platform-Tools are built and
+released by their own repositories; this project downloads their latest
+published full Release archives and combines them with the remaining fixed SDK
+components:
+
+```text
+android-ndk-r27d-linux-aarch64 release ---------+
+                                                 |
+platform-tools_r37.0.1-linux-aarch64 release ---+--> android-sdk-linux.zip
+                                                 |
+Google SDK archives + Kitware CMake + Ninja -----+
+                                                 |
+embedded Build-Tools 36 source ------------------+
+```
+
+`sources.lock` fixes the component source versions, producer repositories, and
+expected asset names:
+
+- The latest full Release of the Platform-Tools producer is installed as
+  `platform-tools/`, while the package/source boundary stays 37.0.1/37.0.0.
+- The latest full Release of the NDK producer is installed as
+  `ndk/27.3.13750724/`, while the source version stays r27d.
+- Google SDK, Kitware CMake, and Ninja upstream archives with fixed versions
+  and checksums for the other SDK components.
+
+For each producer, the build resolves latest once and downloads the ZIP and its
+`.sha256` from that same Release. The Release tag is a producer build-script
+revision, not an Android component version. The SDK build does not clone or
+rebuild either standalone repository, and there is no cyclic dependency. To
+integrate a producer fix:
+
+1. Build, validate, and publish the corresponding standalone project.
+2. Run a clean SDK build; it selects the newly published latest Release.
+3. Validate the complete SDK before publishing its Release.
 
 ## Build on Ubuntu 26.04
 
@@ -29,7 +67,22 @@ To omit the NDK while developing another component:
 ./scripts/resolute-local-build.sh --without-ndk
 ```
 
-Local builds use `nproc` by default. CI can set `JOBS=4`.
+Local builds use all processors reported by `nproc` unless `JOBS` is set.
+GitHub Actions explicitly uses `JOBS=4` for the free hosted runner.
+The build entry rejects hosts other than Ubuntu 26.04 unless
+`ALLOW_UNSUPPORTED_HOST=1` is explicitly set.
+
+The complete file, link, content, and normalized permission comparison always
+constructs a fresh x86_64 reference tree from checksum-pinned Google archives.
+Set `REFERENCE_DIR` only to explicitly select an existing official x86_64 SDK
+tree. The validator rejects an AArch64, incomplete, bytecode-contaminated, or
+self-referential reference tree; reference validation is never silently
+skipped.
+
+Validation also scans every NDK host ELF position for AArch64 binaries and
+uses the packaged Clang and LLD to link a C executable and C++ shared library
+for `aarch64-linux-android21`. This verifies the downloaded producer artifact
+again after it has been integrated into the complete SDK.
 
 ## Recommended environment
 
@@ -85,11 +138,13 @@ already incorporated.
   AArch64 source build.
 - CMake comes from matching Kitware AArch64 releases. Ninja 1.10.2 is
   cross-built from source; Ninja 1.12.1 uses its official AArch64 release.
-- Platform-Tools comes from the checksum-pinned `v1.0.0` release of
-  `kaspersigi/platform-tools_r37.0.1-linux-aarch64`.
-- NDK comes from the checksum-pinned `v1.0.1` release of
-  `kaspersigi/android-ndk-r27d-linux-aarch64` and reports revision
-  `27.3.13750724`.
+- Platform-Tools comes from the latest full Release of
+  `kaspersigi/platform-tools_r37.0.1-linux-aarch64`. Google publishes the
+  37.0.1 binary package, but the locked public source line is 37.0.0; the
+  community AArch64 `adb` and `fastboot` binaries therefore report 37.0.0.
+- NDK comes from the latest full Release of
+  `kaspersigi/android-ndk-r27d-linux-aarch64` and remains locked to revision
+  `27.3.13750724` (r27d).
 
 Google does not publish the Command-line Tools 22 `android` bootstrapper for
 Linux AArch64. It is an online self-updater, so this fixed SDK replaces it with
@@ -100,3 +155,10 @@ Build-Tools 36 still contains deprecated RenderScript host entries. The two
 command entry points are explicit unsupported stubs, and four RenderScript-only
 shared libraries are omitted. RenderScript target libraries under ABI-named
 directories remain byte-for-byte identical to Google's package.
+
+## License
+
+Repository-owned code is licensed under the Apache License 2.0; see
+[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Embedded and packaged upstream
+components retain their original license and notice files at their
+corresponding paths.

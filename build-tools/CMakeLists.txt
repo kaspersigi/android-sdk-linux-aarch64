@@ -1,7 +1,7 @@
 #
 # Android Build Tools 36.0.0 for GNU/Linux AArch64
 #
-# Builds Android SDK tools as native Linux ARM64 binaries.
+# Builds Android SDK tools as native Linux AArch64 binaries.
 # Adapted from https://github.com/lzhiyong/android-sdk-tools (Apache 2.0)
 #
 
@@ -14,8 +14,10 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(Threads REQUIRED)
 
 # set global cflags and cxxflags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Wno-attributes")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wno-attributes")
+set(REPRODUCIBLE_PATH_FLAGS
+    "-ffile-prefix-map=${PROJECT_SOURCE_DIR}=android-build-tools -fmacro-prefix-map=${PROJECT_SOURCE_DIR}=android-build-tools")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -Wno-attributes ${REPRODUCIBLE_PATH_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wno-attributes ${REPRODUCIBLE_PATH_FLAGS}")
 
 # GCC compatibility: stub out Clang-specific nullability annotations
 if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
