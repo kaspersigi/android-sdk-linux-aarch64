@@ -19,18 +19,20 @@ else
     sudo_command=(sudo)
 fi
 
-# Upgrade the native zlib development package before installing its arm64
-# multiarch peer so both architectures resolve to the same archive version.
+# Upgrade the native runtime packages before installing their arm64 multiarch
+# peers so both architectures resolve to the same archive versions.
 host_packages=(
     binutils binutils-aarch64-linux-gnu ca-certificates cmake curl file gawk
     g++-aarch64-linux-gnu gcc-aarch64-linux-gnu ninja-build
-    openjdk-21-jdk-headless pkg-config python3
+    libgcc-s1 libstdc++6 openjdk-21-jdk-headless pkg-config python3
     qemu-user-binfmt tar unzip zip zlib1g-dev
 )
 "${sudo_command[@]}" apt-get update
 "${sudo_command[@]}" apt-get install -y --no-install-recommends "${host_packages[@]}"
 
 if [[ "$arch" == amd64 ]]; then
+    libgcc_version="$(dpkg-query -W -f='${Version}' libgcc-s1:amd64)"
+    libstdcxx_version="$(dpkg-query -W -f='${Version}' libstdc++6:amd64)"
     zlib_version="$(dpkg-query -W -f='${Version}' zlib1g-dev:amd64)"
     if ! dpkg --print-foreign-architectures | grep -Fxq arm64; then
         "${sudo_command[@]}" dpkg --add-architecture arm64
@@ -53,7 +55,10 @@ EOF
     "${sudo_command[@]}" apt-get update "${ports_options[@]}"
     "${sudo_command[@]}" apt-get install -y --no-install-recommends \
         "${ports_options[@]}" \
-        "zlib1g:arm64=$zlib_version" "zlib1g-dev:arm64=$zlib_version"
+        "libgcc-s1:arm64=$libgcc_version" \
+        "libstdc++6:arm64=$libstdcxx_version" \
+        "zlib1g:arm64=$zlib_version" \
+        "zlib1g-dev:arm64=$zlib_version"
     rm -f -- "$ports_sources"
     trap - EXIT
 fi
