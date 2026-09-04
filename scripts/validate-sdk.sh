@@ -14,6 +14,30 @@ reference="$(realpath -e -- "$reference")"
 [[ "$reference" != "$sdk" ]] ||
     die "SDK reference and candidate resolve to the same directory: $sdk"
 
+verify_cached_release_archive() {
+    local asset="$1" archive="$cache_dir/$1" checksum="$cache_dir/$1.sha256"
+    local digest filename remainder expected= actual matches=0
+
+    [[ -f "$archive" ]] || die "community Release archive is missing: $archive"
+    [[ -f "$checksum" ]] || die "community Release checksum is missing: $checksum"
+    while read -r digest filename remainder; do
+        filename=${filename#\*}
+        [[ "$filename" == "$asset" ]] || continue
+        [[ "$digest" =~ ^[0-9a-fA-F]{64}$ && -z "$remainder" ]] ||
+            die "invalid checksum entry for $asset in $checksum"
+        expected=${digest,,}
+        ((matches += 1))
+    done < "$checksum"
+    (( matches == 1 )) ||
+        die "$checksum must contain exactly one SHA-256 entry for $asset"
+    actual=$(sha256sum "$archive" | awk '{print $1}')
+    [[ "$actual" == "$expected" ]] ||
+        die "community Release archive checksum mismatch: $archive"
+}
+
+verify_cached_release_archive "$PLATFORM_TOOLS_RELEASE_ASSET"
+verify_cached_release_archive "$NDK_RELEASE_ASSET"
+
 [[ -d "$sdk/ndk/$SDK_NDK_VERSION" ]] ||
     die "SDK does not contain the required NDK $SDK_NDK_VERSION"
 

@@ -61,14 +61,34 @@ HOST_SCRIPT_TEMPLATES = {
     "cmdline-tools/latest/bin/android": "android-offline",
 }
 
-GENERATED_METADATA = {
-    "build-tools/36.0.0/package.xml",
-    "cmake/3.22.1/package.xml",
-    "cmake/4.1.2/package.xml",
-    "platforms/android-36/package.xml",
-    "platform-tools/package.xml",
-    "ndk/27.3.13750724/package.xml",
+GENERIC_METADATA_FIELDS = {
+    "build-tools/36.0.0/package.xml": (
+        "build-tools;36.0.0", "36", "0", "0",
+        "Android SDK Build-Tools 36 Linux AArch64",
+    ),
+    "cmake/3.22.1/package.xml": (
+        "cmake;3.22.1", "3", "22", "1", "CMake 3.22.1 Linux AArch64",
+    ),
+    "cmake/4.1.2/package.xml": (
+        "cmake;4.1.2", "4", "1", "2", "CMake 4.1.2 Linux AArch64",
+    ),
+    "ndk/27.3.13750724/package.xml": (
+        "ndk;27.3.13750724", "27", "3", "13750724",
+        "NDK (Side by side) 27.3.13750724 Linux AArch64",
+    ),
 }
+
+DIRECT_METADATA_TEMPLATES = {
+    "platforms/android-36/package.xml": "package-platform.xml.in",
+}
+
+RELEASE_METADATA = {
+    "platform-tools/package.xml": "platform-tools/package.xml",
+}
+
+GENERATED_METADATA = (
+    set(GENERIC_METADATA_FIELDS) | set(DIRECT_METADATA_TEMPLATES) | set(RELEASE_METADATA)
+)
 
 INTENTIONAL_MISSING = {
     ".knownPackages",
@@ -96,6 +116,9 @@ NDK_HOST_GENERATED_CONTENT_PREFIXES = (
 NDK_HOST_GENERATED_CONTENT_FILES = {
     "ndk/27.3.13750724/prebuilt/linux-aarch64/lib/libyasm.a",
     "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/lib/libbolt_rt_instr.a",
+}
+
+NDK_PYTHON_CONFIG_FILES = {
     "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
     "python3/include/python3.11/pyconfig.h",
     "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
@@ -105,6 +128,11 @@ NDK_HOST_GENERATED_CONTENT_FILES = {
     "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
     "python3/lib/python3.11/_sysconfigdata__linux_aarch64-linux-gnu.py",
 }
+
+NDK_COMPILER_RT_GENERATED_TEXT_PREFIX = (
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "lib/clang/18/lib/aarch64-unknown-linux-gnu/"
+)
 
 NDK_HOST_ELF_CONTENT_PREFIXES = (
     "ndk/27.3.13750724/prebuilt/linux-aarch64/bin",
@@ -133,13 +161,11 @@ NDK_HOST_SCRIPT_DIFFERENCES = {
 }
 
 NDK_ROOT_PREFIX = "ndk/27.3.13750724/"
-NDK_RELEASE_ARCHIVE = Path(
-    os.environ.get(
-        "NDK_RELEASE_ARCHIVE",
-        Path(__file__).resolve().parents[1]
-        / ".cache/android-ndk-r27d-linux.zip",
-    )
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PLATFORM_TOOLS_RELEASE_ARCHIVE = (
+    PROJECT_ROOT / ".cache/platform-tools_r37.0.1-linux.zip"
 )
+NDK_RELEASE_ARCHIVE = PROJECT_ROOT / ".cache/android-ndk-r27d-linux.zip"
 
 
 @dataclass(frozen=True)
@@ -213,14 +239,10 @@ def file_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
-def ndk_release_script_matches(relative: str, candidate: Path) -> bool:
-    ndk_relative = relative.removeprefix(NDK_ROOT_PREFIX)
-    archive_member = f"android-ndk-r27d/{ndk_relative}"
+def archive_member_matches(archive_path: Path, member: str, candidate: Path) -> bool:
     try:
-        with zipfile.ZipFile(NDK_RELEASE_ARCHIVE) as archive:
-            matches = [
-                info for info in archive.infolist() if info.filename == archive_member
-            ]
+        with zipfile.ZipFile(archive_path) as archive:
+            matches = [info for info in archive.infolist() if info.filename == member]
             if len(matches) != 1 or matches[0].is_dir():
                 return False
             digest = hashlib.sha256()
@@ -230,6 +252,49 @@ def ndk_release_script_matches(relative: str, candidate: Path) -> bool:
     except (OSError, zipfile.BadZipFile):
         return False
     return file_digest(candidate) == digest.hexdigest()
+
+
+def generated_metadata_matches(relative: str, candidate: Path) -> bool:
+    try:
+        if relative in GENERIC_METADATA_FIELDS:
+            package_path, major, minor, micro, display = GENERIC_METADATA_FIELDS[relative]
+            content = (PROJECT_ROOT / "templates/package-generic.xml.in").read_text(
+                encoding="utf-8"
+            )
+            for placeholder, value in (
+                ("@PATH@", package_path),
+                ("@MAJOR@", major),
+                ("@MINOR@", minor),
+                ("@MICRO@", micro),
+                ("@DISPLAY@", display),
+            ):
+                content = content.replace(placeholder, value)
+            return candidate.read_text(encoding="utf-8") == content
+        if relative in DIRECT_METADATA_TEMPLATES:
+            template = PROJECT_ROOT / "templates" / DIRECT_METADATA_TEMPLATES[relative]
+            return files_equal(template, candidate)
+        if relative in RELEASE_METADATA:
+            return archive_member_matches(
+                PLATFORM_TOOLS_RELEASE_ARCHIVE,
+                RELEASE_METADATA[relative],
+                candidate,
+            )
+    except (OSError, UnicodeError):
+        return False
+    return False
+
+
+def ndk_release_file_matches(relative: str, candidate: Path) -> bool:
+    ndk_relative = relative.removeprefix(NDK_ROOT_PREFIX)
+    archive_member = f"android-ndk-r27d/{ndk_relative}"
+    return archive_member_matches(NDK_RELEASE_ARCHIVE, archive_member, candidate)
+
+
+def is_ndk_generated_text_path(relative: str) -> bool:
+    return relative in NDK_PYTHON_CONFIG_FILES or (
+        relative.startswith(NDK_COMPILER_RT_GENERATED_TEXT_PREFIX)
+        and relative.endswith(".syms")
+    )
 
 
 def content_difference_is_expected(
@@ -245,8 +310,12 @@ def content_difference_is_expected(
         )
         return files_equal(template, candidate.source)
     if relative in NDK_HOST_SCRIPT_DIFFERENCES:
-        return ndk_release_script_matches(relative, candidate.source)
-    if relative in GENERATED_METADATA | NDK_HOST_GENERATED_CONTENT_FILES:
+        return ndk_release_file_matches(relative, candidate.source)
+    if relative in GENERATED_METADATA:
+        return generated_metadata_matches(relative, candidate.source)
+    if is_ndk_generated_text_path(relative):
+        return ndk_release_file_matches(relative, candidate.source)
+    if relative in NDK_HOST_GENERATED_CONTENT_FILES:
         return True
     if any(
         relative == prefix or relative.startswith(prefix + "/")
@@ -340,8 +409,10 @@ def main() -> int:
         left = reference[relative].source
         right = candidate[relative].source
         requires_explicit_content = relative in (
-            HOST_SCRIPT_CONTENT_DIFFERENCES | NDK_HOST_SCRIPT_DIFFERENCES
-        )
+            HOST_SCRIPT_CONTENT_DIFFERENCES
+            | NDK_HOST_SCRIPT_DIFFERENCES
+            | GENERATED_METADATA
+        ) or is_ndk_generated_text_path(relative)
         if (
             requires_explicit_content
             and not content_difference_is_expected(

@@ -96,6 +96,13 @@ component libc++ SONAMEs, and loads all component libc++ runtimes independently.
 SDK-generated host wrapper scripts must exactly match their checked-in
 templates, while the nine patched NDK host scripts must remain byte-identical
 to the checksum-verified NDK archive from the selected latest full Release.
+The NDK's four CPython configuration files and all compiler-rt `*.syms` files
+are also compared byte-for-byte with that selected archive. SDK-generated
+package metadata must match its checked-in template exactly, and the
+Platform-Tools `package.xml` must match the selected Platform-Tools Release.
+Before any Release content is used as a comparison anchor, the SDK validator
+rechecks both cached community archives against their downloaded checksum
+assets; ambient environment variables cannot redirect those anchors.
 
 ## Recommended environment
 

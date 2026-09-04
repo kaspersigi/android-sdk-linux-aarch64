@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import runpy
 import struct
@@ -172,6 +173,124 @@ class HostScriptDifferenceTest(unittest.TestCase):
             )
         finally:
             function_globals["NDK_RELEASE_ARCHIVE"] = original_archive
+
+    def test_environment_cannot_replace_ndk_release_archive(self) -> None:
+        original = os.environ.get("NDK_RELEASE_ARCHIVE")
+        os.environ["NDK_RELEASE_ARCHIVE"] = "/tmp/unverified-ndk.zip"
+        try:
+            fresh_module = runpy.run_path(
+                str(PROJECT_ROOT / "scripts/compare-reference-layout.py")
+            )
+        finally:
+            if original is None:
+                os.environ.pop("NDK_RELEASE_ARCHIVE", None)
+            else:
+                os.environ["NDK_RELEASE_ARCHIVE"] = original
+        self.assertEqual(
+            fresh_module["NDK_RELEASE_ARCHIVE"],
+            PROJECT_ROOT / ".cache/android-ndk-r27d-linux.zip",
+        )
+
+    def test_ndk_generated_text_must_equal_selected_release(self) -> None:
+        relative = (
+            "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+            "python3/include/python3.11/pyconfig.h"
+        )
+        member = "android-ndk-r27d/" + relative.removeprefix(
+            "ndk/27.3.13750724/"
+        )
+        archive = Path(self.temporary_directory.name) / "ndk-generated-text.zip"
+        payload = b"#define SIZEOF_VOID_P 8\n"
+        with zipfile.ZipFile(archive, "w") as output:
+            output.writestr(member, payload)
+        function_globals = content_difference_is_expected.__globals__
+        original_archive = function_globals["NDK_RELEASE_ARCHIVE"]
+        function_globals["NDK_RELEASE_ARCHIVE"] = archive
+        try:
+            self.candidate.write_bytes(payload)
+            self.assertTrue(
+                content_difference_is_expected(
+                    relative, self.entry(self.reference), self.entry(self.candidate)
+                )
+            )
+            self.candidate.write_bytes(b"")
+            self.assertFalse(
+                content_difference_is_expected(
+                    relative, self.entry(self.reference), self.entry(self.candidate)
+                )
+            )
+        finally:
+            function_globals["NDK_RELEASE_ARCHIVE"] = original_archive
+
+
+class GeneratedMetadataDifferenceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        root = Path(self.temporary_directory.name)
+        self.reference = root / "reference.xml"
+        self.candidate = root / "candidate.xml"
+        self.reference.write_text("official x86_64 metadata\n", encoding="utf-8")
+
+    def tearDown(self) -> None:
+        self.temporary_directory.cleanup()
+
+    def entry(self, path: Path) -> Entry:
+        return Entry("file", path, 0o644)
+
+    def assert_metadata_result(self, relative: str, expected: bool) -> None:
+        self.assertEqual(
+            content_difference_is_expected(
+                relative, self.entry(self.reference), self.entry(self.candidate)
+            ),
+            expected,
+        )
+
+    def test_generic_metadata_must_equal_rendered_template(self) -> None:
+        relative = "build-tools/36.0.0/package.xml"
+        fields = MODULE["GENERIC_METADATA_FIELDS"][relative]
+        content = (PROJECT_ROOT / "templates/package-generic.xml.in").read_text(
+            encoding="utf-8"
+        )
+        for placeholder, value in zip(
+            ("@PATH@", "@MAJOR@", "@MINOR@", "@MICRO@", "@DISPLAY@"),
+            fields,
+        ):
+            content = content.replace(placeholder, value)
+        self.candidate.write_text(content, encoding="utf-8")
+        self.assert_metadata_result(relative, True)
+        self.candidate.write_text(
+            content.replace(
+                "Android SDK Build-Tools 36 Linux AArch64", "tampered metadata"
+            ),
+            encoding="utf-8",
+        )
+        self.assert_metadata_result(relative, False)
+
+    def test_direct_metadata_must_equal_checked_in_template(self) -> None:
+        relative = "platforms/android-36/package.xml"
+        self.candidate.write_bytes(
+            (PROJECT_ROOT / "templates/package-platform.xml.in").read_bytes()
+        )
+        self.assert_metadata_result(relative, True)
+        self.candidate.write_bytes(b"")
+        self.assert_metadata_result(relative, False)
+
+    def test_platform_tools_metadata_must_equal_selected_release(self) -> None:
+        relative = "platform-tools/package.xml"
+        archive = Path(self.temporary_directory.name) / "platform-tools.zip"
+        payload = b"release package metadata\n"
+        with zipfile.ZipFile(archive, "w") as output:
+            output.writestr("platform-tools/package.xml", payload)
+        function_globals = content_difference_is_expected.__globals__
+        original_archive = function_globals["PLATFORM_TOOLS_RELEASE_ARCHIVE"]
+        function_globals["PLATFORM_TOOLS_RELEASE_ARCHIVE"] = archive
+        try:
+            self.candidate.write_bytes(payload)
+            self.assert_metadata_result(relative, True)
+            self.candidate.write_bytes(b"")
+            self.assert_metadata_result(relative, False)
+        finally:
+            function_globals["PLATFORM_TOOLS_RELEASE_ARCHIVE"] = original_archive
 
 
 class TypeMismatchTest(unittest.TestCase):
