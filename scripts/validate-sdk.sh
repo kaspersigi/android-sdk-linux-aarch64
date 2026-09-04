@@ -117,6 +117,23 @@ check_ndk_needed_libraries() {
     )
 }
 
+check_sdk_host_needed_libraries() {
+    local path="$1" dependency
+
+    while IFS= read -r dependency; do
+        case "$dependency" in
+            libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|libgcc_s.so.1|ld-linux-aarch64.so.1)
+                ;;
+            *)
+                die "unexpected external shared-library dependency in $path: $dependency"
+                ;;
+        esac
+    done < <(
+        readelf -d -- "$path" |
+            sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'
+    )
+}
+
 grep -Fqx "Pkg.Revision = $SDK_NDK_VERSION" \
     "$ndk/source.properties" ||
     die "NDK does not report pinned revision $SDK_NDK_VERSION"
@@ -188,6 +205,7 @@ if [[ -f "$sdk/build-tools/36.0.0/lld-bin/lld" ]] &&
 fi
 for relative in "${host_elfs[@]}"; do
     require_aarch64_elf "$sdk/$relative"
+    check_sdk_host_needed_libraries "$sdk/$relative"
 done
 
 readelf -d "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so" |
@@ -196,6 +214,9 @@ readelf -d "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so" |
 readelf -d "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so.1" |
     grep -Fq 'Library soname: [libc++.so.1]' ||
     die "Build-Tools libc++.so.1 has an unexpected SONAME"
+readelf -d "$sdk/platform-tools/lib64/libc++.so" |
+    grep -Fq 'Library soname: [libc++.so]' ||
+    die "Platform-Tools libc++.so has an unexpected SONAME"
 
 native_build_tools=(aapt aapt2 aidl dexdump split-select zipalign)
 for name in "${native_build_tools[@]}"; do
@@ -257,6 +278,13 @@ for name in libc++.so libc++abi.so libunwind.so; do
     run_arm64 "$ndk_toolchain/python3/bin/python3.11" -c \
         'import ctypes, sys; ctypes.CDLL(sys.argv[1])' \
         "$ndk_host_runtime_dir/$name"
+done
+for runtime in \
+    "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so" \
+    "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so.1" \
+    "$sdk/platform-tools/lib64/libc++.so"; do
+    run_arm64 "$ndk_toolchain/python3/bin/python3.11" -c \
+        'import ctypes, sys; ctypes.CDLL(sys.argv[1])' "$runtime"
 done
 
 print_first_line() {

@@ -33,8 +33,8 @@ CMAKE_4_AARCH64_SHA256=0634996f918b3bab11f45522899c81c987b09c9a64d15f6a0d2bb51c4
 
 NINJA_1_10_SOURCE_URL=https://github.com/ninja-build/ninja/archive/refs/tags/v1.10.2.tar.gz
 NINJA_1_10_SOURCE_SHA256=ce35865411f0490368a8fc383f29071de6690cbadc27704734978221f25e2bed
-NINJA_1_12_AARCH64_URL=https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux-aarch64.zip
-NINJA_1_12_AARCH64_SHA256=5c25c6570b0155e95fce5918cb95f1ad9870df5768653afe128db822301a05a1
+NINJA_1_12_SOURCE_URL=https://github.com/ninja-build/ninja/archive/refs/tags/v1.12.1.tar.gz
+NINJA_1_12_SOURCE_SHA256=821bdff48a3f683bc4bb3b6f0b5fe7b2d647cf65d52aeb63328c91a6c6df285a
 
 PLATFORM_TOOLS_RELEASE_REPOSITORY=kaspersigi/platform-tools_r37.0.1-linux-aarch64
 PLATFORM_TOOLS_RELEASE_ASSET=platform-tools_r37.0.1-linux.zip

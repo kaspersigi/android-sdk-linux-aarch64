@@ -30,8 +30,8 @@ download_checked "$CMAKE_4_AARCH64_URL" \
     "$cache_dir/cmake-4.1.2-linux-aarch64.tar.gz" sha256 "$CMAKE_4_AARCH64_SHA256"
 download_checked "$NINJA_1_10_SOURCE_URL" \
     "$cache_dir/ninja-v1.10.2.tar.gz" sha256 "$NINJA_1_10_SOURCE_SHA256"
-download_checked "$NINJA_1_12_AARCH64_URL" \
-    "$cache_dir/ninja-linux-aarch64-v1.12.1.zip" sha256 "$NINJA_1_12_AARCH64_SHA256"
+download_checked "$NINJA_1_12_SOURCE_URL" \
+    "$cache_dir/ninja-v1.12.1.tar.gz" sha256 "$NINJA_1_12_SOURCE_SHA256"
 platform_tools_release_tag=
 download_latest_github_release_asset \
     "$PLATFORM_TOOLS_RELEASE_REPOSITORY" \

@@ -83,7 +83,10 @@ host runtime independently, and verifies that compiler-rt does not depend on a
 system `libstdc++.so`. It then uses the packaged Clang and LLD to link a C
 executable and C++ shared library for `aarch64-linux-android21`. These checks
 verify the downloaded producer artifact again after it has been integrated
-into the complete SDK.
+into the complete SDK. The SDK-level gate also checks every explicit
+Build-Tools, CMake, Ninja, and Platform-Tools host ELF against the permitted
+GNU/Linux runtime dependency set, verifies component libc++ SONAMEs, and loads
+all component libc++ runtimes independently.
 
 ## Recommended environment
 
@@ -142,8 +145,10 @@ already incorporated.
 - Architecture-independent files come from checksum-pinned Google SDK
   archives. Their six x86_64 Build-Tools executables are replaced by the local
   AArch64 source build.
-- CMake comes from matching Kitware AArch64 releases. Ninja 1.10.2 is
-  cross-built from source; Ninja 1.12.1 uses its official AArch64 release.
+- CMake comes from matching Kitware AArch64 releases. Ninja 1.10.2 and 1.12.1
+  are cross-built from their pinned sources with the C++ runtime linked
+  statically, avoiding the system `libstdc++.so.6` dependency just as Google's
+  Linux x86_64 package does.
 - Platform-Tools comes from the latest full Release of
   `kaspersigi/platform-tools_r37.0.1-linux-aarch64`. Google publishes the
   37.0.1 binary package, but the locked public source line is 37.0.0; the
