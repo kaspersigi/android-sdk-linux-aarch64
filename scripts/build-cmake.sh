@@ -4,7 +4,8 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/common.sh"
 
-for command_name in cmake ninja aarch64-linux-gnu-g++ tar unzip; do
+for command_name in cmake ninja aarch64-linux-gnu-gcc \
+    aarch64-linux-gnu-g++ tar unzip; do
     command -v "$command_name" >/dev/null || die "missing command: $command_name"
 done
 
@@ -26,6 +27,7 @@ tar -xzf "$cache_dir/ninja-v1.10.2.tar.gz" \
 cmake -S "$sources_dir/ninja-1.10.2" -B "$build_dir/ninja-1.10.2" -G Ninja \
     -DCMAKE_SYSTEM_NAME=Linux \
     -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+    -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
     -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_TESTING=OFF
@@ -50,4 +52,3 @@ for version in 3.22.1 4.1.2; do
 done
 
 echo "Built exact-version CMake/Ninja host binaries for Linux AArch64."
-
