@@ -67,8 +67,12 @@ To omit the NDK while developing another component:
 ./scripts/resolute-local-build.sh --without-ndk
 ```
 
-Local builds use all processors reported by `nproc` unless `JOBS` is set.
-GitHub Actions explicitly uses `JOBS=4` for the free hosted runner.
+Project policy requires every local build and validation run to use all
+processors reported by `nproc`. Do not set `JOBS=4` locally to imitate the
+hosted workflow; the shared build entry rejects a smaller local `JOBS` value.
+`JOBS` is reserved for CI, and GitHub Actions explicitly sets `JOBS=4` for
+the free hosted runner.
+
 The build entry rejects hosts other than Ubuntu 26.04 unless
 `ALLOW_UNSUPPORTED_HOST=1` is explicitly set.
 
@@ -107,12 +111,12 @@ archive, then creates or updates the matching GitHub Release with these assets:
 - `android-sdk-linux.zip`
 - `android-sdk-linux.zip.sha256`
 
-The first release tag is `v1.0.0`. After the project files have been committed,
-it can be created and pushed with:
+After the project files have been committed, create and push the next release
+tag (replace `vX.Y.Z` with the intended version):
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 Release publishing uses the repository's built-in `GITHUB_TOKEN`; no additional
@@ -123,7 +127,12 @@ secret is required.
 The six native Build-Tools programs `aapt`, `aapt2`, `aidl`, `dexdump`,
 `split-select`, and `zipalign` are built from the self-contained source tree in
 [`build-tools/`](build-tools/README.md). This is a normal CMake/Ninja GNU/Linux
-cross build using Ubuntu's `aarch64-linux-gnu-gcc/g++` and glibc sysroot.
+cross build using Ubuntu's `aarch64-linux-gnu-gcc/g++` and glibc sysroot. The six
+programs statically link their C++ compiler runtime and zlib instead of relying
+on the host's `libstdc++.so` or `libz.so`. Build-Tools independently creates and
+carries its own LLVM 22 `lib64/libc++.so` and `libc++.so.1` compatibility
+entries; it does not reuse the Platform-Tools copy. `$ORIGIN/lib64` remains the
+component-local shared-library search path, matching Google's package model.
 
 The build does not clone AOSP, run Soong, build Bionic, download an external
 standalone-build framework, or apply a patch series. The trimmed Android 16
@@ -155,6 +164,11 @@ Build-Tools 36 still contains deprecated RenderScript host entries. The two
 command entry points are explicit unsupported stubs, and four RenderScript-only
 shared libraries are omitted. RenderScript target libraries under ABI-named
 directories remain byte-for-byte identical to Google's package.
+
+The official x86_64 Build-Tools 36 package includes LLD 9.0.7. This SDK does not
+build that legacy LLVM tree: `build-tools/36.0.0/lld-bin/lld` is an explicit
+wrapper around the pinned NDK r27d LLD 18.0.4. That linker is validated during
+the SDK build and is the linker used by the supported NDK workflow.
 
 ## License
 

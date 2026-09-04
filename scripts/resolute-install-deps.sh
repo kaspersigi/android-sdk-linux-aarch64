@@ -56,11 +56,16 @@ EOF
     "${sudo_command[@]}" apt-get install -y --no-install-recommends \
         "${ports_options[@]}" \
         "libgcc-s1:arm64=$libgcc_version" \
+        libc++-22-dev:arm64 \
+        libc++abi-22-dev:arm64 \
         "libstdc++6:arm64=$libstdcxx_version" \
         "zlib1g:arm64=$zlib_version" \
         "zlib1g-dev:arm64=$zlib_version"
     rm -f -- "$ports_sources"
     trap - EXIT
+else
+    "${sudo_command[@]}" apt-get install -y --no-install-recommends \
+        libc++-22-dev libc++abi-22-dev
 fi
 
 echo "Dependencies installed for Ubuntu 26.04 $arch."

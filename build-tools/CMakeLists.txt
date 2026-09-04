@@ -13,6 +13,21 @@ set(CMAKE_CXX_STANDARD 20)
 
 find_package(Threads REQUIRED)
 
+set(SDK_STATIC_ZLIB "" CACHE FILEPATH
+    "AArch64 static zlib archive")
+if(NOT EXISTS "${SDK_STATIC_ZLIB}")
+    message(FATAL_ERROR "SDK_STATIC_ZLIB is not a file: ${SDK_STATIC_ZLIB}")
+endif()
+
+# Keep the native tools independent from the host's C++ and zlib packages.
+# This is the same static-runtime model used by the AArch64 Platform-Tools
+# producer, but each SDK component is built and packaged independently.
+add_library(z STATIC IMPORTED GLOBAL)
+set_target_properties(z PROPERTIES IMPORTED_LOCATION "${SDK_STATIC_ZLIB}")
+add_link_options(-static-libgcc $<$<LINK_LANGUAGE:CXX>:-static-libstdc++>)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+set(CMAKE_INSTALL_RPATH "\$ORIGIN/lib64")
+
 # set global cflags and cxxflags
 set(REPRODUCIBLE_PATH_FLAGS
     "-ffile-prefix-map=${PROJECT_SOURCE_DIR}=android-build-tools -fmacro-prefix-map=${PROJECT_SOURCE_DIR}=android-build-tools")

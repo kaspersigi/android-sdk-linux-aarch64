@@ -68,12 +68,14 @@ install -m 0755 "$project_root/templates/renderscript-unsupported" "$bt/llvm-rs-
 install -m 0755 "$project_root/templates/android-offline" \
     "$sdk/cmdline-tools/latest/bin/android"
 
-# The working Platform-Tools package already carries the same LLVM libc++ ABI
-# needed by this SDK. The remaining removed lib64 files only support deprecated
-# RenderScript host tools and deliberately have no fake replacements.
+# Build-Tools carries its own LLVM libc++ runtime, matching the independent
+# component-local layout of Google's Linux package. The remaining removed
+# lib64 files only support deprecated RenderScript host tools.
 mkdir -p -- "$bt/lib64" "$bt/lld-bin"
-install -m 0755 "$sdk/platform-tools/lib64/libc++.so" "$bt/lib64/libc++.so"
-install -m 0644 "$sdk/platform-tools/lib64/libc++.so" "$bt/lib64/libc++.so.1"
+install -m 0755 "$build_dir/build-tools-aarch64/lib64/libc++.so" \
+    "$bt/lib64/libc++.so"
+install -m 0644 "$build_dir/build-tools-aarch64/lib64/libc++.so.1" \
+    "$bt/lib64/libc++.so.1"
 install -m 0755 "$project_root/templates/build-tools-lld" "$bt/lld-bin/lld"
 
 if (( include_ndk )); then

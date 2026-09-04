@@ -167,6 +167,13 @@ for relative in "${host_elfs[@]}"; do
     require_aarch64_elf "$sdk/$relative"
 done
 
+readelf -d "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so" |
+    grep -Fq 'Library soname: [libc++.so]' ||
+    die "Build-Tools libc++.so has an unexpected SONAME"
+readelf -d "$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/lib64/libc++.so.1" |
+    grep -Fq 'Library soname: [libc++.so.1]' ||
+    die "Build-Tools libc++.so.1 has an unexpected SONAME"
+
 native_build_tools=(aapt aapt2 aidl dexdump split-select zipalign)
 for name in "${native_build_tools[@]}"; do
     path="$sdk/build-tools/$SDK_BUILD_TOOLS_VERSION/$name"
@@ -176,6 +183,12 @@ for name in "${native_build_tools[@]}"; do
     if readelf -d "$path" | grep -q 'libc_musl'; then
         die "$path unexpectedly depends on musl"
     fi
+    if readelf -d "$path" |
+       grep -Eq 'Shared library: \[(libstdc\+\+\.so|libz\.so|libc\+\+abi\.so|libunwind\.so)'; then
+        die "$path depends on an unpackaged C++ or zlib runtime"
+    fi
+    readelf -d "$path" | grep -Fq 'Library runpath: [$ORIGIN/lib64]' ||
+        die "$path does not resolve libc++.so relative to Build-Tools"
 done
 
 while IFS= read -r -d '' path; do
@@ -232,6 +245,11 @@ run_arm64 "$sdk/build-tools/36.0.0/aapt2" version
 run_arm64 "$sdk/build-tools/36.0.0/aapt" version
 run_arm64 "$sdk/build-tools/36.0.0/aidl" --help >/dev/null 2>&1
 run_arm64 "$sdk/build-tools/36.0.0/split-select" --help >/dev/null 2>&1
+build_tools_lld_version="$("$sdk/build-tools/36.0.0/lld-bin/lld" \
+    -flavor gnu --version)"
+print_first_line "$build_tools_lld_version"
+grep -Fq 'LLD 18.0.4' <<< "$build_tools_lld_version" ||
+    die "Build-Tools LLD wrapper does not resolve to the pinned NDK r27d LLD"
 platform_tools_version="$(run_arm64 "$sdk/platform-tools/adb" version)"
 printf '%s\n' "$platform_tools_version"
 grep -Fq "Version $SDK_PLATFORM_TOOLS_PUBLIC_SOURCE_VERSION-" \
