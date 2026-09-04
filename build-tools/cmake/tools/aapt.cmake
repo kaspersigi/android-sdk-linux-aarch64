@@ -44,6 +44,9 @@ target_compile_definitions(libaapt PRIVATE
     -DSTATIC_ANDROIDFW_FOR_TOOLS
     )
 target_include_directories(libaapt PRIVATE ${INCLUDES})
+target_link_libraries(libaapt PRIVATE
+    png_static
+    )
 
 add_executable(aapt ${SRC}/base/tools/aapt/Main.cpp)
 target_compile_definitions(aapt PRIVATE
