@@ -14,8 +14,8 @@ reference="$(realpath -e -- "$reference")"
 [[ "$reference" != "$sdk" ]] ||
     die "SDK reference and candidate resolve to the same directory: $sdk"
 
-candidate_has_ndk=0
-[[ -d "$sdk/ndk/$SDK_NDK_VERSION" ]] && candidate_has_ndk=1
+[[ -d "$sdk/ndk/$SDK_NDK_VERSION" ]] ||
+    die "SDK does not contain the required NDK $SDK_NDK_VERSION"
 
 require_x86_64_reference_elf() {
     local path="$1" kind
@@ -34,31 +34,18 @@ for relative in \
     require_x86_64_reference_elf "$reference/$relative"
 done
 
-if (( candidate_has_ndk )); then
-    [[ -d "$reference/ndk/$SDK_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64" ]] ||
-        die "SDK reference does not contain the pinned Linux x86_64 NDK"
-    [[ ! -e "$reference/ndk/$SDK_NDK_VERSION/toolchains/llvm/prebuilt/linux-aarch64" ]] ||
-        die "SDK reference unexpectedly contains a Linux AArch64 NDK host tree"
-fi
+[[ -d "$reference/ndk/$SDK_NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64" ]] ||
+    die "SDK reference does not contain the pinned Linux x86_64 NDK"
+[[ ! -e "$reference/ndk/$SDK_NDK_VERSION/toolchains/llvm/prebuilt/linux-aarch64" ]] ||
+    die "SDK reference unexpectedly contains a Linux AArch64 NDK host tree"
 
 expected_reference_entries=31095
-if (( ! candidate_has_ndk )); then
-    expected_reference_entries=21816
-fi
 if [[ -e "$reference/.knownPackages" || -L "$reference/.knownPackages" ]]; then
     [[ -f "$reference/.knownPackages" && ! -L "$reference/.knownPackages" ]] ||
         die "SDK reference .knownPackages entry is not a regular file"
     ((expected_reference_entries += 1))
 fi
-if (( candidate_has_ndk )); then
-    actual_reference_entries=$(find "$reference" -mindepth 1 -printf . | wc -c)
-else
-    actual_reference_entries=$(
-        find "$reference" -mindepth 1 \
-            \( -path "$reference/ndk" -o -path "$reference/ndk/*" \) -prune -o \
-            -printf . | wc -c
-    )
-fi
+actual_reference_entries=$(find "$reference" -mindepth 1 -printf . | wc -c)
 [[ "$actual_reference_entries" == "$expected_reference_entries" ]] ||
     die "SDK reference entry count mismatch: expected $expected_reference_entries, got $actual_reference_entries"
 ! find "$reference" -type f \( -name '*.pyc' -o -name '*.pyo' \) \
@@ -67,7 +54,6 @@ fi
     -print -quit | grep -q . || die "SDK reference contains a non-empty Python cache directory"
 
 archive="$dist_dir/android-sdk-linux.zip"
-(( candidate_has_ndk )) || archive="$dist_dir/android-sdk-linux-without-ndk.zip"
 checksum="$archive.sha256"
 [[ -f "$archive" ]] || die "SDK archive does not exist: $archive"
 [[ -f "$checksum" ]] || die "SDK archive checksum does not exist: $checksum"
@@ -87,8 +73,10 @@ grep -Fqx "Pkg.Revision=$SDK_CMDLINE_TOOLS_VERSION" \
 grep -Fqx 'Pkg.Revision = 3.22.1' "$sdk/cmake/3.22.1/source.properties"
 grep -Fqx 'Pkg.Revision = 4.1.2' "$sdk/cmake/4.1.2/source.properties"
 
-ndk=""
-ndk_toolchain=""
+ndk="$sdk/ndk/$SDK_NDK_VERSION"
+ndk_toolchain="$ndk/toolchains/llvm/prebuilt/linux-aarch64"
+ndk_host_runtime_dir="$ndk_toolchain/lib/aarch64-unknown-linux-gnu"
+ndk_compiler_rt_dir="$ndk_toolchain/lib/clang/18/lib/aarch64-unknown-linux-gnu"
 ndk_host_elf_count=0
 scan_ndk_host_elfs() {
     local root="$1" scope="$2" path kind
@@ -107,30 +95,65 @@ scan_ndk_host_elfs() {
     done < <(find "${find_args[@]}" -type f -print0)
 }
 
-if [[ -d "$sdk/ndk/$SDK_NDK_VERSION" ]]; then
-    ndk="$sdk/ndk/$SDK_NDK_VERSION"
-    ndk_toolchain="$ndk/toolchains/llvm/prebuilt/linux-aarch64"
-    grep -Fqx "Pkg.Revision = $SDK_NDK_VERSION" \
-        "$ndk/source.properties" ||
-        die "NDK does not report pinned revision $SDK_NDK_VERSION"
-    grep -Fqx 'Pkg.ReleaseName = r27d' \
-        "$ndk/source.properties" ||
-        die "NDK does not report pinned release name r27d"
+check_ndk_needed_libraries() {
+    local path="$1" allow_libgcc="$2" dependency
 
-    scan_ndk_host_elfs "$ndk_toolchain/bin" recursive
-    scan_ndk_host_elfs "$ndk_toolchain/python3" recursive
-    scan_ndk_host_elfs "$ndk_toolchain/lib/python3.11" recursive
-    scan_ndk_host_elfs "$ndk/prebuilt/linux-aarch64/bin" recursive
-    scan_ndk_host_elfs "$ndk/shader-tools/linux-aarch64" recursive
-    scan_ndk_host_elfs "$ndk/simpleperf/bin/linux/aarch64" recursive
-    scan_ndk_host_elfs "$ndk_toolchain/lib" shallow
-    scan_ndk_host_elfs "$ndk_toolchain/lib/aarch64-unknown-linux-gnu" shallow
-    scan_ndk_host_elfs \
-        "$ndk_toolchain/lib/clang/18/lib/aarch64-unknown-linux-gnu" shallow
-    scan_ndk_host_elfs "$ndk_toolchain/musl/lib" shallow
-    (( ndk_host_elf_count > 0 )) || die "no NDK host ELF files were found"
-    echo "ndk_aarch64_host_elfs=$ndk_host_elf_count"
-fi
+    while IFS= read -r dependency; do
+        case "$dependency" in
+            libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|ld-linux-aarch64.so.1)
+                ;;
+            libgcc_s.so.1)
+                if [[ "$allow_libgcc" != 1 ]]; then
+                    die "unexpected external shared-library dependency in $path: $dependency"
+                fi
+                ;;
+            *)
+                die "unexpected external shared-library dependency in $path: $dependency"
+                ;;
+        esac
+    done < <(
+        readelf -d -- "$path" |
+            sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p'
+    )
+}
+
+grep -Fqx "Pkg.Revision = $SDK_NDK_VERSION" \
+    "$ndk/source.properties" ||
+    die "NDK does not report pinned revision $SDK_NDK_VERSION"
+grep -Fqx 'Pkg.ReleaseName = r27d' \
+    "$ndk/source.properties" ||
+    die "NDK does not report pinned release name r27d"
+
+scan_ndk_host_elfs "$ndk_toolchain/bin" recursive
+scan_ndk_host_elfs "$ndk_toolchain/python3" recursive
+scan_ndk_host_elfs "$ndk_toolchain/lib/python3.11" recursive
+scan_ndk_host_elfs "$ndk/prebuilt/linux-aarch64/bin" recursive
+scan_ndk_host_elfs "$ndk/shader-tools/linux-aarch64" recursive
+scan_ndk_host_elfs "$ndk/simpleperf/bin/linux/aarch64" recursive
+scan_ndk_host_elfs "$ndk_toolchain/lib" shallow
+scan_ndk_host_elfs "$ndk_toolchain/lib/aarch64-unknown-linux-gnu" shallow
+scan_ndk_host_elfs \
+    "$ndk_toolchain/lib/clang/18/lib/aarch64-unknown-linux-gnu" shallow
+scan_ndk_host_elfs "$ndk_toolchain/musl/lib" shallow
+(( ndk_host_elf_count > 0 )) || die "no NDK host ELF files were found"
+echo "ndk_aarch64_host_elfs=$ndk_host_elf_count"
+
+for name in libc++.so libc++abi.so libunwind.so; do
+    runtime="$ndk_host_runtime_dir/$name"
+    [[ -f "$runtime" ]] || die "required NDK host runtime is missing: $runtime"
+    readelf -d -- "$runtime" | grep -Fq "Library soname: [$name]" ||
+        die "NDK host runtime has an unexpected SONAME: $runtime"
+    check_ndk_needed_libraries "$runtime" 0
+done
+
+ndk_compiler_rt_shared_count=0
+while IFS= read -r -d '' runtime; do
+    check_ndk_needed_libraries "$runtime" 1
+    ((ndk_compiler_rt_shared_count += 1))
+done < <(find "$ndk_compiler_rt_dir" -maxdepth 1 -type f -name '*.so' -print0)
+(( ndk_compiler_rt_shared_count > 0 )) ||
+    die "no NDK compiler-rt shared libraries were found"
+echo "ndk_compiler_rt_shared_libraries=$ndk_compiler_rt_shared_count"
 
 host_elfs=(
     build-tools/36.0.0/aapt
@@ -207,9 +230,7 @@ while IFS= read -r -d '' path; do
     esac
 done < <(find "$sdk" -type f -print0)
 
-compare_args=()
-[[ -d "$sdk/ndk/$SDK_NDK_VERSION" ]] || compare_args+=(--without-ndk)
-"$script_dir/compare-reference-layout.py" "${compare_args[@]}" "$reference" "$sdk"
+"$script_dir/compare-reference-layout.py" "$reference" "$sdk"
 
 runner=()
 case "$(uname -m)" in
@@ -231,6 +252,12 @@ esac
 run_arm64() {
     "${runner[@]}" "$@"
 }
+
+for name in libc++.so libc++abi.so libunwind.so; do
+    run_arm64 "$ndk_toolchain/python3/bin/python3.11" -c \
+        'import ctypes, sys; ctypes.CDLL(sys.argv[1])' \
+        "$ndk_host_runtime_dir/$name"
+done
 
 print_first_line() {
     local output="$1"
@@ -279,24 +306,22 @@ cleanup_probe() {
 trap cleanup_probe EXIT
 mkdir -p -- "$probe/res/values" "$probe/compiled" "$probe/dex"
 
-if [[ -n "$ndk_toolchain" ]]; then
-    run_arm64 "$ndk_toolchain/bin/clang" --version
-    run_arm64 "$ndk_toolchain/bin/ld.lld" --version
-    printf '%s\n' 'int main(void) { return 0; }' > "$probe/ndk-smoke.c"
-    printf '%s\n' 'extern "C" int sdk_ndk_smoke() { return 0; }' > \
-        "$probe/ndk-smoke.cpp"
-    run_arm64 "$ndk_toolchain/bin/clang" \
-        --target=aarch64-linux-android21 \
-        --sysroot="$ndk_toolchain/sysroot" \
-        -fuse-ld=lld "$probe/ndk-smoke.c" -o "$probe/ndk-smoke"
-    run_arm64 "$ndk_toolchain/bin/clang++" \
-        --target=aarch64-linux-android21 \
-        --sysroot="$ndk_toolchain/sysroot" \
-        -fuse-ld=lld -fPIC -shared -stdlib=libc++ -static-libstdc++ \
-        "$probe/ndk-smoke.cpp" -o "$probe/libndk-smoke.so"
-    require_aarch64_elf "$probe/ndk-smoke"
-    require_aarch64_elf "$probe/libndk-smoke.so"
-fi
+run_arm64 "$ndk_toolchain/bin/clang" --version
+run_arm64 "$ndk_toolchain/bin/ld.lld" --version
+printf '%s\n' 'int main(void) { return 0; }' > "$probe/ndk-smoke.c"
+printf '%s\n' 'extern "C" int sdk_ndk_smoke() { return 0; }' > \
+    "$probe/ndk-smoke.cpp"
+run_arm64 "$ndk_toolchain/bin/clang" \
+    --target=aarch64-linux-android21 \
+    --sysroot="$ndk_toolchain/sysroot" \
+    -fuse-ld=lld "$probe/ndk-smoke.c" -o "$probe/ndk-smoke"
+run_arm64 "$ndk_toolchain/bin/clang++" \
+    --target=aarch64-linux-android21 \
+    --sysroot="$ndk_toolchain/sysroot" \
+    -fuse-ld=lld -fPIC -shared -stdlib=libc++ -static-libstdc++ \
+    "$probe/ndk-smoke.cpp" -o "$probe/libndk-smoke.so"
+require_aarch64_elf "$probe/ndk-smoke"
+require_aarch64_elf "$probe/libndk-smoke.so"
 
 printf '%s\n' '<resources><string name="app_name">SDK probe</string></resources>' > \
     "$probe/res/values/strings.xml"

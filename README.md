@@ -61,12 +61,6 @@ integrate a producer fix:
 ./scripts/resolute-local-build.sh
 ```
 
-To omit the NDK while developing another component:
-
-```bash
-./scripts/resolute-local-build.sh --without-ndk
-```
-
 Project policy requires every local build and validation run to use all
 processors reported by `nproc`. Do not set `JOBS=4` locally to imitate the
 hosted workflow; the shared build entry rejects a smaller local `JOBS` value.
@@ -83,10 +77,13 @@ tree. The validator rejects an AArch64, incomplete, bytecode-contaminated, or
 self-referential reference tree; reference validation is never silently
 skipped.
 
-Validation also scans every NDK host ELF position for AArch64 binaries and
-uses the packaged Clang and LLD to link a C executable and C++ shared library
-for `aarch64-linux-android21`. This verifies the downloaded producer artifact
-again after it has been integrated into the complete SDK.
+Validation also scans every NDK host ELF position for AArch64 binaries, checks
+the host C++ runtime SONAMEs and shared-library dependency closure, loads each
+host runtime independently, and verifies that compiler-rt does not depend on a
+system `libstdc++.so`. It then uses the packaged Clang and LLD to link a C
+executable and C++ shared library for `aarch64-linux-android21`. These checks
+verify the downloaded producer artifact again after it has been integrated
+into the complete SDK.
 
 ## Recommended environment
 

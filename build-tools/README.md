@@ -55,6 +55,7 @@ cmake -S build-tools -B build/build-tools-cmake -GNinja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE="$PWD/build-tools/cmake/aarch64-linux-gnu.cmake" \
   -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DSDK_STATIC_ZLIB=/usr/lib/aarch64-linux-gnu/libz.a \
   -Dprotobuf_BUILD_TESTS=OFF
 cmake --build build/build-tools-cmake --parallel "$(nproc)" \
   --target aapt aapt2 aidl dexdump split-select zipalign

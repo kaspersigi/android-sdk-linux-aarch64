@@ -4,12 +4,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/common.sh"
 
-include_ndk=1
-if [[ "${1:-}" == "--without-ndk" ]]; then
-    include_ndk=0
-    shift
-fi
-(( $# == 0 )) || die "usage: $0 [--without-ndk]"
+(( $# == 0 )) || die "usage: $0"
 
 sdk="$dist_dir/sdk"
 rm -rf -- "$sdk"
@@ -78,20 +73,18 @@ install -m 0644 "$build_dir/build-tools-aarch64/lib64/libc++.so.1" \
     "$bt/lib64/libc++.so.1"
 install -m 0755 "$project_root/templates/build-tools-lld" "$bt/lld-bin/lld"
 
-if (( include_ndk )); then
-    [[ -f "$cache_dir/$NDK_RELEASE_ASSET" ]] ||
-        die "missing NDK Release archive; run fetch-sources.sh after the Release is available"
-    temporary="$(mktemp -d)"
-    unzip -q "$cache_dir/$NDK_RELEASE_ASSET" -d "$temporary"
-    ndk_root="$temporary/android-ndk-r27d"
-    [[ -d "$ndk_root" ]] || die "unexpected NDK archive layout"
-    mkdir -p -- "$sdk/ndk/$SDK_NDK_VERSION"
-    cp -a -- "$ndk_root/." "$sdk/ndk/$SDK_NDK_VERSION/"
-    write_generic_package_xml "$sdk/ndk/$SDK_NDK_VERSION/package.xml" \
-        "ndk;$SDK_NDK_VERSION" 27 3 13750724 \
-        "NDK (Side by side) $SDK_NDK_VERSION Linux AArch64"
-    rm -rf -- "$temporary"
-fi
+[[ -f "$cache_dir/$NDK_RELEASE_ASSET" ]] ||
+    die "missing NDK Release archive; run fetch-sources.sh after the Release is available"
+temporary="$(mktemp -d)"
+unzip -q "$cache_dir/$NDK_RELEASE_ASSET" -d "$temporary"
+ndk_root="$temporary/android-ndk-r27d"
+[[ -d "$ndk_root" ]] || die "unexpected NDK archive layout"
+mkdir -p -- "$sdk/ndk/$SDK_NDK_VERSION"
+cp -a -- "$ndk_root/." "$sdk/ndk/$SDK_NDK_VERSION/"
+write_generic_package_xml "$sdk/ndk/$SDK_NDK_VERSION/package.xml" \
+    "ndk;$SDK_NDK_VERSION" 27 3 13750724 \
+    "NDK (Side by side) $SDK_NDK_VERSION Linux AArch64"
+rm -rf -- "$temporary"
 
 printf '\n%s' '24333f8a63b6825ea9c5514f83c2829b004d1fee' > \
     "$sdk/licenses/android-sdk-license"
@@ -104,9 +97,6 @@ find "$sdk" -type f -perm /0111 -exec chmod 0755 {} +
 find "$sdk" -type f ! -perm /0111 -exec chmod 0644 {} +
 
 archive="$dist_dir/android-sdk-linux.zip"
-if (( ! include_ndk )); then
-    archive="$dist_dir/android-sdk-linux-without-ndk.zip"
-fi
 rm -f -- "$archive" "$archive.sha256"
 (
     cd "$dist_dir"

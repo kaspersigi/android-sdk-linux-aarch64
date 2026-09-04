@@ -4,12 +4,7 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/common.sh"
 
-include_ndk=1
-if [[ "${1:-}" == "--without-ndk" ]]; then
-    include_ndk=0
-    shift
-fi
-(( $# == 0 )) || die "usage: $0 [--without-ndk]"
+(( $# == 0 )) || die "usage: $0"
 
 reference="$build_dir/reference-sdk"
 rm -rf -- "$reference"
@@ -54,21 +49,19 @@ write_generic_package_xml "$reference/platform-tools/package.xml" \
 rm -rf -- "$temporary"
 trap - EXIT
 
-if (( include_ndk )); then
-    temporary="$(mktemp -d)"
-    trap cleanup_temporary EXIT
-    unzip -q "$cache_dir/reference-$REFERENCE_NDK_ARCHIVE" -d "$temporary"
-    [[ -d "$temporary/android-ndk-r27d" ]] ||
-        die "unexpected official NDK reference archive layout"
-    mkdir -p -- "$reference/ndk/$SDK_NDK_VERSION"
-    cp -a -- "$temporary/android-ndk-r27d/." \
-        "$reference/ndk/$SDK_NDK_VERSION/"
-    write_generic_package_xml "$reference/ndk/$SDK_NDK_VERSION/package.xml" \
-        "ndk;$SDK_NDK_VERSION" 27 3 13750724 \
-        "NDK (Side by side) $SDK_NDK_VERSION"
-    rm -rf -- "$temporary"
-    trap - EXIT
-fi
+temporary="$(mktemp -d)"
+trap cleanup_temporary EXIT
+unzip -q "$cache_dir/reference-$REFERENCE_NDK_ARCHIVE" -d "$temporary"
+[[ -d "$temporary/android-ndk-r27d" ]] ||
+    die "unexpected official NDK reference archive layout"
+mkdir -p -- "$reference/ndk/$SDK_NDK_VERSION"
+cp -a -- "$temporary/android-ndk-r27d/." \
+    "$reference/ndk/$SDK_NDK_VERSION/"
+write_generic_package_xml "$reference/ndk/$SDK_NDK_VERSION/package.xml" \
+    "ndk;$SDK_NDK_VERSION" 27 3 13750724 \
+    "NDK (Side by side) $SDK_NDK_VERSION"
+rm -rf -- "$temporary"
+trap - EXIT
 
 printf '\n%s' '24333f8a63b6825ea9c5514f83c2829b004d1fee' > \
     "$reference/licenses/android-sdk-license"

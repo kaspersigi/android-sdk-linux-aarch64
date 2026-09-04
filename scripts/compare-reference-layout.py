@@ -216,14 +216,10 @@ def content_difference_is_expected(
     )
 
 
-def inventory(
-    root: Path, without_ndk: bool, normalize_reference: bool = False
-) -> dict[str, Entry]:
+def inventory(root: Path, normalize_reference: bool = False) -> dict[str, Entry]:
     result: dict[str, Entry] = {}
     for path in root.rglob("*"):
         relative = path.relative_to(root).as_posix()
-        if without_ndk and (relative == "ndk" or relative.startswith("ndk/")):
-            continue
         mode = stat.S_IMODE(os.lstat(path).st_mode)
         if path.is_symlink():
             link = os.readlink(path)
@@ -249,11 +245,10 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("reference", type=Path)
     parser.add_argument("candidate", type=Path)
-    parser.add_argument("--without-ndk", action="store_true")
     args = parser.parse_args()
 
-    reference = inventory(args.reference, args.without_ndk, normalize_reference=True)
-    candidate = inventory(args.candidate, args.without_ndk)
+    reference = inventory(args.reference, normalize_reference=True)
+    candidate = inventory(args.candidate)
     missing = sorted(set(reference) - set(candidate))
     extra = sorted(set(candidate) - set(reference))
     mismatched_types = sorted(
