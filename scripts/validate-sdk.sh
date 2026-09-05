@@ -14,27 +14,6 @@ reference="$(realpath -e -- "$reference")"
 [[ "$reference" != "$sdk" ]] ||
     die "SDK reference and candidate resolve to the same directory: $sdk"
 
-verify_cached_release_archive() {
-    local asset="$1" archive="$cache_dir/$1" checksum="$cache_dir/$1.sha256"
-    local digest filename remainder expected= actual matches=0
-
-    [[ -f "$archive" ]] || die "community Release archive is missing: $archive"
-    [[ -f "$checksum" ]] || die "community Release checksum is missing: $checksum"
-    while read -r digest filename remainder; do
-        filename=${filename#\*}
-        [[ "$filename" == "$asset" ]] || continue
-        [[ "$digest" =~ ^[0-9a-fA-F]{64}$ && -z "$remainder" ]] ||
-            die "invalid checksum entry for $asset in $checksum"
-        expected=${digest,,}
-        ((matches += 1))
-    done < "$checksum"
-    (( matches == 1 )) ||
-        die "$checksum must contain exactly one SHA-256 entry for $asset"
-    actual=$(sha256sum "$archive" | awk '{print $1}')
-    [[ "$actual" == "$expected" ]] ||
-        die "community Release archive checksum mismatch: $archive"
-}
-
 verify_cached_release_archive "$PLATFORM_TOOLS_RELEASE_ASSET"
 verify_cached_release_archive "$NDK_RELEASE_ASSET"
 
@@ -395,19 +374,11 @@ done < <(find "$sdk" -type f -print0)
 "$script_dir/compare-reference-layout.py" "$reference" "$sdk"
 
 runner=()
+select_arm64_runtime
 case "$(uname -m)" in
     aarch64|arm64) ;;
     *)
-        command -v qemu-aarch64 >/dev/null || die "qemu-aarch64 is required on a non-AArch64 host"
-        if [[ -e "$cache_dir/runtime-sysroot/usr/lib/ld-linux-aarch64.so.1" ]]; then
-            runner=(qemu-aarch64 -L "$cache_dir/runtime-sysroot")
-        elif [[ -e /lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 ]]; then
-            runner=(qemu-aarch64 -L /)
-        elif [[ -e /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1 ]]; then
-            runner=(qemu-aarch64 -L /usr/aarch64-linux-gnu)
-        else
-            die "no AArch64 runtime sysroot is available"
-        fi
+        runner=(qemu-aarch64 -L "$QEMU_LD_PREFIX")
         ;;
 esac
 
@@ -437,6 +408,8 @@ print_first_line "$(run_arm64 "$sdk/cmake/3.22.1/bin/cmake" --version)"
 run_arm64 "$sdk/cmake/3.22.1/bin/ninja" --version
 print_first_line "$(run_arm64 "$sdk/cmake/4.1.2/bin/cmake" --version)"
 run_arm64 "$sdk/cmake/4.1.2/bin/ninja" --version
+python3 -B "$project_root/tests/ndk_entrypoints_test.py" --ndk "$ndk" --runtime \
+    --cmake "$sdk/cmake/3.22.1/bin/cmake" --cmake "$sdk/cmake/4.1.2/bin/cmake"
 run_arm64 "$sdk/build-tools/36.0.0/aapt2" version
 run_arm64 "$sdk/build-tools/36.0.0/aapt" version
 run_arm64 "$sdk/build-tools/36.0.0/aidl" --help >/dev/null 2>&1

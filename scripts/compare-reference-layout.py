@@ -158,6 +158,10 @@ NDK_HOST_SCRIPT_DIFFERENCES = {
     "ndk/27.3.13750724/ndk-lldb",
     "ndk/27.3.13750724/ndk-stack",
     "ndk/27.3.13750724/ndk-which",
+    "ndk/27.3.13750724/simpleperf/simpleperf_utils.py",
+    "ndk/27.3.13750724/prebuilt/linux-aarch64/bin/ndkgdb.pyz",
+    "ndk/27.3.13750724/prebuilt/linux-aarch64/bin/ndk-which",
+    "ndk/27.3.13750724/build/cmake/hooks/post/Android-Determine.cmake",
 }
 
 NDK_ROOT_PREFIX = "ndk/27.3.13750724/"

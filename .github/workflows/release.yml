@@ -32,7 +32,8 @@ jobs:
           df -h /
       - name: Install Ubuntu 26.04 dependencies
         run: ./scripts/resolute-install-deps.sh
-      - name: Build, validate, and package
+      # The local entry rejects incompatible NDK Releases before component builds.
+      - name: Preflight producer entrypoints, build, validate, and package
         env:
           JOBS: "4"
           GITHUB_TOKEN: ${{ github.token }}

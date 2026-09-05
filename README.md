@@ -65,6 +65,30 @@ integrate a producer fix:
 ./scripts/resolute-local-build.sh
 ```
 
+The build entry runs an NDK consumer preflight **after downloading and before
+building Ninja or Build-Tools**. It checks both exact CMake versions, three
+Android configuration routes (legacy, non-legacy, native), C/C++ linking,
+ndk-build's four target ABIs, compressed debugger host discovery, shell
+launchers, and Simpleperf's default library lookup with packaged AArch64 Python.
+Debugger tests also verify the archive-relative NDK root, real Make-variable
+lookup, API parsing, and main-flow lldb-server selection before device writes
+(with simulated device replies, not a real debugging session).
+An older producer Release missing these fixes fails here, not after a long
+SDK build. Publish the fixed standalone NDK first, then build this SDK.
+
+```bash
+# Download once and run the early gate, without building SDK components:
+./scripts/resolute-local-build.sh --preflight-only
+# With already downloaded dependencies, test a local producer candidate:
+bash scripts/preflight-ndk.sh /path/to/android-ndk-r27d
+```
+
+The optional local path is diagnostic only; it cannot replace the
+checksum-verified Release archive used by final layout/provenance validation.
+Preflight combines Google's modules with the exact Kitware AArch64 CMake
+binary, using host Ninja. Final validation repeats with the assembled SDK's
+own CMake **and Ninja**, so preflight does not stand in for artifact testing.
+
 Project policy requires every local build and validation run to use all
 processors reported by `nproc`. Do not set `JOBS=4` locally to imitate the
 hosted workflow; the shared build entry rejects a smaller local `JOBS` value.
@@ -94,7 +118,7 @@ Build-Tools, CMake, Ninja, and Platform-Tools host ELF against the permitted
 GNU/Linux runtime dependency set (excluding system `libgcc_s.so.1`), verifies
 component libc++ SONAMEs, and loads all component libc++ runtimes independently.
 SDK-generated host wrapper scripts must exactly match their checked-in
-templates, while the nine patched NDK host scripts must remain byte-identical
+templates, while the thirteen patched NDK host script/archive files must remain byte-identical
 to the checksum-verified NDK archive from the selected latest full Release.
 The NDK's four CPython configuration files and all compiler-rt `*.syms` files
 are also compared byte-for-byte with that selected archive. SDK-generated
@@ -103,6 +127,14 @@ Platform-Tools `package.xml` must match the selected Platform-Tools Release.
 Before any Release content is used as a comparison anchor, the SDK validator
 rechecks both cached community archives against their downloaded checksum
 assets; ambient environment variables cannot redirect those anchors.
+
+The shared consumer contract is `tests/ndk_entrypoints_test.py`, kept identical
+to the standalone NDK repository. The SDK does not repatch the producer or
+modify Google's CMake modules; the NDK's post-Android-Determine hook provides
+the native/non-legacy fix. On x86_64, QEMU/binfmt and the AArch64 runtime sysroot
+are required. Only uname identity is simulated for host shell/CMake processes;
+there are no forced `HOST_ARCH`/`ANDROID_HOST_TAG` values. Passing this suite
+does not establish native AArch64 device/debugger or arbitrary Gradle coverage.
 
 ## Recommended environment
 

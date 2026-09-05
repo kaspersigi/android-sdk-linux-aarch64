@@ -191,6 +191,30 @@ class HostScriptDifferenceTest(unittest.TestCase):
             PROJECT_ROOT / ".cache/android-ndk-r27d-linux.zip",
         )
 
+    def test_ndk_entrypoint_fixes_are_release_pinned_not_broad_exemptions(self) -> None:
+        paths = ("simpleperf/simpleperf_utils.py", "prebuilt/linux-aarch64/bin/ndkgdb.pyz",
+                 "build/cmake/hooks/post/Android-Determine.cmake", "prebuilt/linux-aarch64/bin/ndk-which")
+        archive = Path(self.temporary_directory.name) / "ndk-entrypoints.zip"
+        with zipfile.ZipFile(archive, "w") as output:
+            for relative in paths:
+                output.writestr("android-ndk-r27d/" + relative, b"release-fixed-entrypoint")
+        function_globals = content_difference_is_expected.__globals__
+        original = function_globals["NDK_RELEASE_ARCHIVE"]
+        function_globals["NDK_RELEASE_ARCHIVE"] = archive
+        try:
+            for relative in paths:
+                with self.subTest(path=relative):
+                    self.candidate.write_bytes(b"release-fixed-entrypoint")
+                    self.assertTrue(content_difference_is_expected(
+                        "ndk/27.3.13750724/" + relative,
+                        self.entry(self.reference), self.entry(self.candidate)))
+                    self.candidate.write_bytes(b"tampered-entrypoint")
+                    self.assertFalse(content_difference_is_expected(
+                        "ndk/27.3.13750724/" + relative,
+                        self.entry(self.reference), self.entry(self.candidate)))
+        finally:
+            function_globals["NDK_RELEASE_ARCHIVE"] = original
+
     def test_ndk_generated_text_must_equal_selected_release(self) -> None:
         relative = (
             "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"

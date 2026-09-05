@@ -61,6 +61,46 @@ require_resolute_host() {
     esac
 }
 
+verify_cached_release_archive() {
+    local asset="$1" archive="$cache_dir/$1" checksum="$cache_dir/$1.sha256"
+    local digest filename remainder expected= actual matches=0
+
+    [[ -f "$archive" ]] || die "community Release archive is missing: $archive"
+    [[ -f "$checksum" ]] || die "community Release checksum is missing: $checksum"
+    while read -r digest filename remainder; do
+        filename=${filename#\*}
+        [[ "$filename" == "$asset" ]] || continue
+        [[ "$digest" =~ ^[0-9a-fA-F]{64}$ && -z "$remainder" ]] ||
+            die "invalid checksum entry for $asset in $checksum"
+        expected=${digest,,}
+        ((matches += 1))
+    done < "$checksum"
+    (( matches == 1 )) ||
+        die "$checksum must contain exactly one SHA-256 entry for $asset"
+    actual=$(sha256sum "$archive" | awk '{print $1}')
+    [[ "$actual" == "$expected" ]] ||
+        die "community Release archive checksum mismatch: $archive"
+}
+
+select_arm64_runtime() {
+    case "$(uname -m)" in aarch64|arm64) return;; esac
+    command -v qemu-aarch64 >/dev/null ||
+        die "missing qemu-aarch64; run ./scripts/resolute-install-deps.sh (including qemu-user-binfmt)"
+    if [[ -z "${QEMU_LD_PREFIX:-}" ]]; then
+        if [[ -e "$cache_dir/runtime-sysroot/usr/lib/ld-linux-aarch64.so.1" ]]; then
+            QEMU_LD_PREFIX="$cache_dir/runtime-sysroot"
+        elif [[ -e /lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 ]]; then
+            QEMU_LD_PREFIX=/
+        elif [[ -e /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1 ]]; then
+            QEMU_LD_PREFIX=/usr/aarch64-linux-gnu
+        else
+            die "missing AArch64 runtime sysroot; run ./scripts/resolute-install-deps.sh"
+        fi
+    fi
+    [[ -d "$QEMU_LD_PREFIX" ]] || die "invalid QEMU_LD_PREFIX: $QEMU_LD_PREFIX"
+    export QEMU_LD_PREFIX
+}
+
 download_checked() {
     local url="$1" output="$2" algorithm="$3" expected="$4"
     local actual temporary
