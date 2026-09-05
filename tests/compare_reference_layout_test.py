@@ -351,6 +351,77 @@ class TypeMismatchTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+class AgpNdkCompatibilityLinkTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        root = Path(self.temporary_directory.name)
+        self.reference = root / "reference"
+        self.candidate = root / "candidate"
+        prebuilt = Path("ndk/27.3.13750724/toolchains/llvm/prebuilt")
+        original = self.reference / prebuilt / "linux-x86_64"
+        self.target = self.candidate / prebuilt / "linux-aarch64"
+        self.alias = self.candidate / prebuilt / "linux-x86_64"
+        for directory in (original, self.target):
+            directory.mkdir(parents=True)
+            (directory / "marker").write_text("same producer content\n")
+
+    def tearDown(self) -> None:
+        self.temporary_directory.cleanup()
+
+    def compare(self) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-B", str(PROJECT_ROOT / "scripts/compare-reference-layout.py"),
+             str(self.reference), str(self.candidate)],
+            text=True, capture_output=True, check=False,
+        )
+
+    def test_relative_alias_is_accepted_without_following_its_contents(self) -> None:
+        self.alias.symlink_to("linux-aarch64", target_is_directory=True)
+        result = self.compare()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("extra=1\n", result.stdout)
+        self.assertIn("unexpected_extra=0\n", result.stdout)
+        self.assertIn("compatibility_link_mismatches=0\n", result.stdout)
+
+    def test_missing_alias_is_rejected(self) -> None:
+        result = self.compare()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("compatibility_link_mismatches=1\n", result.stdout)
+
+    def test_absolute_alias_is_rejected_even_when_it_resolves(self) -> None:
+        self.alias.symlink_to(self.target, target_is_directory=True)
+        result = self.compare()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("compatibility_link_mismatches=1\n", result.stdout)
+
+    def test_wrong_relative_alias_is_rejected(self) -> None:
+        self.alias.symlink_to(".", target_is_directory=True)
+        result = self.compare()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("compatibility_link_mismatches=1\n", result.stdout)
+
+    def test_real_x86_64_directory_is_rejected(self) -> None:
+        self.alias.mkdir()
+        result = self.compare()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("compatibility_link_mismatches=1\n", result.stdout)
+
+    def test_dangling_alias_is_rejected(self) -> None:
+        (self.target / "marker").unlink()
+        self.target.rmdir()
+        self.alias.symlink_to("linux-aarch64", target_is_directory=True)
+        result = self.compare()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("compatibility_link_mismatches=1\n", result.stdout)
+
+    def test_other_added_paths_remain_rejected(self) -> None:
+        self.alias.symlink_to("linux-aarch64", target_is_directory=True)
+        (self.candidate / "unexpected").write_text("unapproved extra file\n")
+        result = self.compare()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("unexpected_extra=1\n", result.stdout)
+
+
 class NormalizedReferenceCollisionTest(unittest.TestCase):
     def test_x86_64_and_aarch64_host_paths_cannot_collapse(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

@@ -98,6 +98,12 @@ grep -Fqx 'Pkg.Revision = 4.1.2' "$sdk/cmake/4.1.2/source.properties"
 
 ndk="$sdk/ndk/$SDK_NDK_VERSION"
 ndk_toolchain="$ndk/toolchains/llvm/prebuilt/linux-aarch64"
+ndk_agp_toolchain="$ndk/toolchains/llvm/prebuilt/linux-x86_64"
+[[ -L "$ndk_agp_toolchain" && "$(readlink -- "$ndk_agp_toolchain")" == linux-aarch64 ]] ||
+    die "missing or incorrect AGP NDK compatibility link"
+for tool in llvm-strip llvm-objcopy; do
+    require_aarch64_elf "$ndk_agp_toolchain/bin/$tool"
+done
 ndk_host_runtime_dir="$ndk_toolchain/lib/aarch64-unknown-linux-gnu"
 ndk_compiler_rt_dir="$ndk_toolchain/lib/clang/18/lib/aarch64-unknown-linux-gnu"
 declare -A ndk_packaged_host_sonames=()
@@ -460,10 +466,25 @@ run_arm64 "$ndk_toolchain/bin/clang" \
 run_arm64 "$ndk_toolchain/bin/clang++" \
     --target=aarch64-linux-android21 \
     --sysroot="$ndk_toolchain/sysroot" \
-    -fuse-ld=lld -fPIC -shared -stdlib=libc++ -static-libstdc++ \
+    -fuse-ld=lld -g -fPIC -shared -stdlib=libc++ -static-libstdc++ \
     "$probe/ndk-smoke.cpp" -o "$probe/libndk-smoke.so"
 require_aarch64_elf "$probe/ndk-smoke"
 require_aarch64_elf "$probe/libndk-smoke.so"
+
+# Exercise the exact paths AGP uses for JNI stripping and debug metadata.
+readelf -SW "$probe/libndk-smoke.so" > "$probe/ndk-sections.before"
+grep -Fq '.debug_info' "$probe/ndk-sections.before" || die "NDK probe lacks debug info"
+run_arm64 "$ndk_agp_toolchain/bin/llvm-strip" --strip-unneeded \
+    -o "$probe/libndk-smoke-stripped.so" "$probe/libndk-smoke.so"
+run_arm64 "$ndk_agp_toolchain/bin/llvm-objcopy" --only-keep-debug \
+    "$probe/libndk-smoke.so" "$probe/libndk-smoke-debug.so"
+require_aarch64_elf "$probe/libndk-smoke-stripped.so"
+readelf -SW "$probe/libndk-smoke-stripped.so" > "$probe/ndk-sections.stripped"
+! grep -Eq '\.(debug_info|symtab)[[:space:]]' "$probe/ndk-sections.stripped" ||
+    die "AGP NDK strip path did not remove debug symbols"
+readelf -SW "$probe/libndk-smoke-debug.so" > "$probe/ndk-sections.debug"
+grep -Fq '.debug_info' "$probe/ndk-sections.debug" ||
+    die "AGP NDK objcopy path did not preserve debug info"
 
 printf '%s\n' '<resources><string name="app_name">SDK probe</string></resources>' > \
     "$probe/res/values/strings.xml"

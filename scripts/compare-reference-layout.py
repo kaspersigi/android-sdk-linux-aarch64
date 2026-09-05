@@ -19,6 +19,12 @@ if script_dir not in sys.path:
 from elf_validation import is_valid_elf_machine
 
 
+# SDK-owned additions are exact relative links, never another host tree.
+SDK_COMPATIBILITY_LINKS = {
+    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64": "linux-aarch64",
+}
+
+
 HOST_ELF_CONTENT_DIFFERENCES = {
     "build-tools/36.0.0/aapt",
     "build-tools/36.0.0/aapt2",
@@ -377,6 +383,17 @@ def main() -> int:
         return 1
     missing = sorted(set(reference) - set(candidate))
     extra = sorted(set(candidate) - set(reference))
+    unexpected_extra = sorted(set(extra) - set(SDK_COMPATIBILITY_LINKS))
+    compatibility_link_mismatches = []
+    for relative, target in SDK_COMPATIBILITY_LINKS.items():
+        entry = candidate.get(relative)
+        if (
+            entry is None
+            or entry.kind != "link"
+            or entry.link != target
+            or not entry.source.is_dir()
+        ):
+            compatibility_link_mismatches.append(relative)
     mismatched_types = sorted(
         path for path in set(reference) & set(candidate)
         if reference[path].kind != candidate[path].kind
@@ -437,6 +454,9 @@ def main() -> int:
     print(f"intentional_missing={len(set(missing) & set(expected_missing))}")
     print(f"unexpected_missing={len(unexpected_missing)}")
     print(f"extra={len(extra)}")
+    print(f"intentional_extra={len(set(extra) & set(SDK_COMPATIBILITY_LINKS))}")
+    print(f"unexpected_extra={len(unexpected_extra)}")
+    print(f"compatibility_link_mismatches={len(compatibility_link_mismatches)}")
     print(f"type_mismatches={len(mismatched_types)}")
     print(f"link_mismatches={len(link_mismatches)}")
     print(f"content_mismatches={len(content_mismatches)}")
@@ -445,7 +465,8 @@ def main() -> int:
     problems = {
         "unexpected missing": unexpected_missing,
         "expected missing not observed": missing_not_observed,
-        "extra": extra,
+        "unexpected extra": unexpected_extra,
+        "compatibility link mismatch": compatibility_link_mismatches,
         "type mismatch": mismatched_types,
         "link mismatch": link_mismatches,
         "mode mismatch": mode_mismatches,

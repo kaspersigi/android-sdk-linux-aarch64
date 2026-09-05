@@ -81,6 +81,12 @@ ndk_root="$temporary/android-ndk-r27d"
 [[ -d "$ndk_root" ]] || die "unexpected NDK archive layout"
 mkdir -p -- "$sdk/ndk/$SDK_NDK_VERSION"
 cp -a -- "$ndk_root/." "$sdk/ndk/$SDK_NDK_VERSION/"
+# AGP 9.3.2's NdkR25Info selects linux-x86_64 on every Linux host for
+# llvm-strip, llvm-objcopy, and target libc++ lookup. Keep the producer's
+# canonical AArch64 tree intact and add a relocatable SDK compatibility alias.
+ndk_prebuilt="$sdk/ndk/$SDK_NDK_VERSION/toolchains/llvm/prebuilt"
+[[ -d "$ndk_prebuilt/linux-aarch64" ]] || die "missing AArch64 NDK toolchain"
+ln -sT -- linux-aarch64 "$ndk_prebuilt/linux-x86_64"
 write_generic_package_xml "$sdk/ndk/$SDK_NDK_VERSION/package.xml" \
     "ndk;$SDK_NDK_VERSION" 27 3 13750724 \
     "NDK (Side by side) $SDK_NDK_VERSION Linux AArch64"
