@@ -24,13 +24,16 @@ fi
 host_packages=(
     binutils binutils-aarch64-linux-gnu ca-certificates cmake curl file gawk
     g++-aarch64-linux-gnu gcc-aarch64-linux-gnu ninja-build
-    libgcc-s1 libstdc++6 openjdk-21-jdk-headless pkg-config python3
+    libc6 libc6-dev libc-bin libgcc-s1 libstdc++6
+    openjdk-21-jdk-headless pkg-config python3
     qemu-user-binfmt tar unzip zip zlib1g-dev
 )
 "${sudo_command[@]}" apt-get update
 "${sudo_command[@]}" apt-get install -y --no-install-recommends "${host_packages[@]}"
 
 if [[ "$arch" == amd64 ]]; then
+    libc_version="$(dpkg-query -W -f='${Version}' libc6:amd64)"
+    libc_dev_version="$(dpkg-query -W -f='${Version}' libc6-dev:amd64)"
     libgcc_version="$(dpkg-query -W -f='${Version}' libgcc-s1:amd64)"
     libstdcxx_version="$(dpkg-query -W -f='${Version}' libstdc++6:amd64)"
     zlib_version="$(dpkg-query -W -f='${Version}' zlib1g-dev:amd64)"
@@ -55,6 +58,8 @@ EOF
     "${sudo_command[@]}" apt-get update "${ports_options[@]}"
     "${sudo_command[@]}" apt-get install -y --no-install-recommends \
         "${ports_options[@]}" \
+        "libc6:arm64=$libc_version" \
+        "libc6-dev:arm64=$libc_dev_version" \
         "libgcc-s1:arm64=$libgcc_version" \
         libc++-22-dev:arm64 \
         libc++abi-22-dev:arm64 \
