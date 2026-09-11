@@ -12,6 +12,16 @@ select_arm64_runtime
 
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/sdk-ndk-preflight.XXXXXX")
 trap 'rm -rf -- "$temporary"' EXIT
+case "$(uname -m)" in
+    x86_64|amd64)
+        aarch64-linux-gnu-gcc "$project_root/tests/qemu_exec_probe.c" \
+            -o "$temporary/exec-probe"
+        if ! "$temporary/exec-probe" "$temporary/exec-probe" --child; then
+            die "AArch64 direct/child execution failed; run resolute-install-deps.sh to register QEMU binfmt"
+        fi
+        echo "AArch64 direct and child-process execution passed."
+        ;;
+esac
 if (( $# )); then
     ndk=$(realpath -e -- "$1")
     echo "Local NDK diagnostic only (not Release provenance validation): $ndk"

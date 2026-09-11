@@ -68,6 +68,21 @@ EOF
         "zlib1g-dev:arm64=$zlib_version"
     rm -f -- "$ports_sources"
     trap - EXIT
+
+    # Package installation does not always reload binfmt on a hosted runner.
+    # Register only AArch64, then require transparent execution for child tools.
+    if ! mountpoint -q /proc/sys/fs/binfmt_misc; then
+        "${sudo_command[@]}" mount -t binfmt_misc binfmt_misc /proc/sys/fs/binfmt_misc
+    fi
+    binfmt_entry=/proc/sys/fs/binfmt_misc/qemu-aarch64
+    if [[ ! -r "$binfmt_entry" ]] || ! grep -Fxq enabled "$binfmt_entry" ||
+       ! grep -Eq '^flags:.*F' "$binfmt_entry"; then
+        "${sudo_command[@]}" /usr/lib/systemd/systemd-binfmt \
+            /usr/lib/binfmt.d/qemu-aarch64.conf
+    fi
+    grep -Fxq enabled "$binfmt_entry"
+    grep -Eq '^flags:.*F' "$binfmt_entry"
+    echo "QEMU AArch64 binfmt registration enabled."
 else
     "${sudo_command[@]}" apt-get install -y --no-install-recommends \
         libc++-22-dev libc++abi-22-dev

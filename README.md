@@ -67,7 +67,10 @@ integrate a producer fix:
 ```
 
 The build entry runs an NDK consumer preflight **after downloading and before
-building Ninja or Build-Tools**. It checks both exact CMake versions, three
+building Ninja or Build-Tools**. On x86_64, it first verifies that an AArch64
+program can run directly and execute an AArch64 child process. The dependency
+installer registers QEMU's AArch64 binfmt rule when it is absent or disabled.
+The preflight checks both exact CMake versions, three
 Android configuration routes (legacy, non-legacy, native), C/C++ linking,
 ndk-build's four target ABIs, compressed debugger host discovery, shell
 launchers, and Simpleperf's default library lookup with packaged AArch64 Python.
