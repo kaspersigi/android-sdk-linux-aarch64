@@ -59,7 +59,7 @@ for relative in "${reference_ndk_aarch64_roots[@]}"; do
         die "SDK reference unexpectedly contains a Linux AArch64 NDK host root: $relative"
 done
 
-expected_reference_entries=31095
+expected_reference_entries=31952
 if [[ -e "$reference/.knownPackages" || -L "$reference/.knownPackages" ]]; then
     [[ -f "$reference/.knownPackages" && ! -L "$reference/.knownPackages" ]] ||
         die "SDK reference .knownPackages entry is not a regular file"
@@ -105,23 +105,8 @@ for tool in llvm-strip llvm-objcopy; do
     require_aarch64_elf "$ndk_agp_toolchain/bin/$tool"
 done
 ndk_host_runtime_dir="$ndk_toolchain/lib/aarch64-unknown-linux-gnu"
-ndk_compiler_rt_dir="$ndk_toolchain/lib/clang/18/lib/aarch64-unknown-linux-gnu"
 declare -A ndk_packaged_host_sonames=()
 ndk_host_elf_count=0
-
-validate_ndk_host_elf() {
-    local path="$1"
-    case "$path" in
-        "$ndk_compiler_rt_dir/clang_rt.crtbegin.o"|\
-        "$ndk_compiler_rt_dir/clang_rt.crtend.o")
-            "$project_root/scripts/check-aarch64-elf.sh" \
-                --allow-relocatable "$path"
-            ;;
-        *)
-            require_aarch64_elf "$path"
-            ;;
-    esac
-}
 
 register_ndk_packaged_host_sonames() {
     local root="$1" scope="$2" path kind soname dynamic_section
@@ -134,7 +119,7 @@ register_ndk_packaged_host_sonames() {
     while IFS= read -r -d '' path; do
         kind="$(file -b -- "$path")"
         [[ "$kind" == ELF* ]] || continue
-        validate_ndk_host_elf "$path"
+        require_aarch64_elf "$path"
         dynamic_section="$(read_elf_dynamic_section "$path")" ||
             die "cannot read NDK host ELF dynamic section: $path"
         soname="$(sed -n 's/.*Library soname: \[\([^]]*\)\].*/\1/p' \
@@ -160,10 +145,6 @@ check_ndk_host_dependency_closure() {
                 [[ "$path" == "$nis_extension" ]] ||
                     die "unexpected external shared-library dependency in $path: $dependency"
                 ;;
-            libgcc_s.so.1)
-                [[ "$path" == "$ndk_compiler_rt_dir/"* ]] ||
-                    die "unexpected external shared-library dependency in $path: $dependency"
-                ;;
             *)
                 [[ ${ndk_packaged_host_sonames[$dependency]+present} ]] ||
                     die "NDK host ELF depends on an unpackaged shared library in $path: $dependency"
@@ -174,7 +155,7 @@ check_ndk_host_dependency_closure() {
 }
 
 check_ndk_runtime_needed_libraries() {
-    local path="$1" allow_libgcc="$2" dependency dynamic_section
+    local path="$1" dependency dynamic_section
 
     require_aarch64_elf "$path"
     dynamic_section="$(read_elf_dynamic_section "$path")" ||
@@ -183,10 +164,6 @@ check_ndk_runtime_needed_libraries() {
     while IFS= read -r dependency; do
         case "$dependency" in
             libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|ld-linux-aarch64.so.1)
-                ;;
-            libgcc_s.so.1)
-                [[ "$allow_libgcc" == 1 ]] ||
-                    die "unexpected external shared-library dependency in $path: $dependency"
                 ;;
             *)
                 die "unexpected shared-library dependency in NDK runtime $path: $dependency"
@@ -233,9 +210,9 @@ check_sdk_host_needed_libraries() {
 grep -Fqx "Pkg.Revision = $SDK_NDK_VERSION" \
     "$ndk/source.properties" ||
     die "NDK does not report pinned revision $SDK_NDK_VERSION"
-grep -Fqx 'Pkg.ReleaseName = r27d' \
+grep -Fqx 'Pkg.ReleaseName = r30' \
     "$ndk/source.properties" ||
-    die "NDK does not report pinned release name r27d"
+    die "NDK does not report pinned release name r30"
 
 ndk_recursive_host_roots=(
     "$ndk_toolchain/bin"
@@ -248,7 +225,6 @@ ndk_recursive_host_roots=(
 ndk_shallow_host_roots=(
     "$ndk_toolchain/lib"
     "$ndk_host_runtime_dir"
-    "$ndk_compiler_rt_dir"
     "$ndk_toolchain/musl/lib"
 )
 for root in "${ndk_recursive_host_roots[@]}"; do
@@ -276,17 +252,11 @@ for name in libc++.so libc++abi.so libunwind.so; do
         die "cannot read NDK host runtime dynamic section: $runtime"
     grep -Fq "Library soname: [$name]" <<< "$dynamic_section" ||
         die "NDK host runtime has an unexpected SONAME: $runtime"
-    check_ndk_runtime_needed_libraries "$runtime" 0
+    check_ndk_runtime_needed_libraries "$runtime"
 done
 
-ndk_compiler_rt_shared_count=0
-while IFS= read -r -d '' runtime; do
-    check_ndk_runtime_needed_libraries "$runtime" 1
-    ((ndk_compiler_rt_shared_count += 1))
-done < <(find "$ndk_compiler_rt_dir" -maxdepth 1 -type f -name '*.so' -print0)
-(( ndk_compiler_rt_shared_count > 0 )) ||
-    die "no NDK compiler-rt shared libraries were found"
-echo "ndk_compiler_rt_shared_libraries=$ndk_compiler_rt_shared_count"
+# r30 has Android compiler-rt payloads, but no GNU/Linux host compiler-rt tree.
+# The Android payloads remain byte-identical to the official reference archive.
 
 host_elfs=(
     build-tools/36.0.0/aapt
@@ -423,8 +393,8 @@ run_arm64 "$sdk/build-tools/36.0.0/split-select" --help >/dev/null 2>&1
 build_tools_lld_version="$("$sdk/build-tools/36.0.0/lld-bin/lld" \
     -flavor gnu --version)"
 print_first_line "$build_tools_lld_version"
-grep -Fq 'LLD 18.0.4' <<< "$build_tools_lld_version" ||
-    die "Build-Tools LLD wrapper does not resolve to the pinned NDK r27d LLD"
+grep -Fq 'LLD 21.0.0' <<< "$build_tools_lld_version" ||
+    die "Build-Tools LLD wrapper does not resolve to the pinned NDK r30 LLD"
 platform_tools_version="$(run_arm64 "$sdk/platform-tools/adb" version)"
 printf '%s\n' "$platform_tools_version"
 grep -Fq "Version $SDK_PLATFORM_TOOLS_PUBLIC_SOURCE_VERSION-" \
@@ -454,7 +424,13 @@ cleanup_probe() {
 trap cleanup_probe EXIT
 mkdir -p -- "$probe/res/values" "$probe/compiled" "$probe/dex"
 
-run_arm64 "$ndk_toolchain/bin/clang" --version
+ndk_clang_version="$(run_arm64 "$ndk_toolchain/bin/clang" --version)"
+printf '%s\n' "$ndk_clang_version"
+grep -Fq 'clang version 21.0.0' <<< "$ndk_clang_version" ||
+    die "NDK does not report the pinned Clang 21.0.0 version"
+[[ "$(run_arm64 "$ndk_toolchain/bin/clang" -print-resource-dir)" == \
+    "$ndk_toolchain/lib/clang/21" ]] ||
+    die "NDK Clang does not resolve its packaged Clang 21 resource directory"
 run_arm64 "$ndk_toolchain/bin/ld.lld" --version
 printf '%s\n' 'int main(void) { return 0; }' > "$probe/ndk-smoke.c"
 printf '%s\n' 'extern "C" int sdk_ndk_smoke() { return 0; }' > \

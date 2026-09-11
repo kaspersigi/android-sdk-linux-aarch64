@@ -21,10 +21,12 @@ python3 -B "$script_dir/verify-source-snapshot.py"
 
 rm -rf -- "$cmake_build" "$output"
 mkdir -p -- "$output/lib64"
-libcxx_archive=/usr/lib/aarch64-linux-gnu/libc++.a
+# A locally extracted Ubuntu libc++-22-dev:arm64 package avoids replacing
+# another LLVM development package on a shared build host.
+libcxx_archive=${SDK_LIBCXX_ARCHIVE:-/usr/lib/aarch64-linux-gnu/libc++.a}
 static_zlib=/usr/lib/aarch64-linux-gnu/libz.a
 [[ -f "$libcxx_archive" ]] ||
-    die "LLVM 22 AArch64 libc++.a is missing; run resolute-install-deps.sh"
+    die "LLVM 22 AArch64 libc++.a is missing; run resolute-install-deps.sh or set SDK_LIBCXX_ARCHIVE"
 [[ -f "$static_zlib" ]] ||
     die "AArch64 static zlib is missing; run resolute-install-deps.sh"
 for soname in libc++.so libc++.so.1; do

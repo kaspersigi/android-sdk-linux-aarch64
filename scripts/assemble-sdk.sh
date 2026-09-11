@@ -77,7 +77,7 @@ install -m 0755 "$project_root/templates/build-tools-lld" "$bt/lld-bin/lld"
     die "missing NDK Release archive; run fetch-sources.sh after the Release is available"
 temporary="$(mktemp -d)"
 unzip -q "$cache_dir/$NDK_RELEASE_ASSET" -d "$temporary"
-ndk_root="$temporary/android-ndk-r27d"
+ndk_root="$temporary/android-ndk-r30"
 [[ -d "$ndk_root" ]] || die "unexpected NDK archive layout"
 mkdir -p -- "$sdk/ndk/$SDK_NDK_VERSION"
 cp -a -- "$ndk_root/." "$sdk/ndk/$SDK_NDK_VERSION/"
@@ -88,7 +88,7 @@ ndk_prebuilt="$sdk/ndk/$SDK_NDK_VERSION/toolchains/llvm/prebuilt"
 [[ -d "$ndk_prebuilt/linux-aarch64" ]] || die "missing AArch64 NDK toolchain"
 ln -sT -- linux-aarch64 "$ndk_prebuilt/linux-x86_64"
 write_generic_package_xml "$sdk/ndk/$SDK_NDK_VERSION/package.xml" \
-    "ndk;$SDK_NDK_VERSION" 27 3 13750724 \
+    "ndk;$SDK_NDK_VERSION" 30 0 16248370 \
     "NDK (Side by side) $SDK_NDK_VERSION Linux AArch64"
 rm -rf -- "$temporary"
 

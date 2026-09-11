@@ -52,13 +52,13 @@ trap - EXIT
 temporary="$(mktemp -d)"
 trap cleanup_temporary EXIT
 unzip -q "$cache_dir/reference-$REFERENCE_NDK_ARCHIVE" -d "$temporary"
-[[ -d "$temporary/android-ndk-r27d" ]] ||
+[[ -d "$temporary/android-ndk-r30" ]] ||
     die "unexpected official NDK reference archive layout"
 mkdir -p -- "$reference/ndk/$SDK_NDK_VERSION"
-cp -a -- "$temporary/android-ndk-r27d/." \
+cp -a -- "$temporary/android-ndk-r30/." \
     "$reference/ndk/$SDK_NDK_VERSION/"
 write_generic_package_xml "$reference/ndk/$SDK_NDK_VERSION/package.xml" \
-    "ndk;$SDK_NDK_VERSION" 27 3 13750724 \
+    "ndk;$SDK_NDK_VERSION" 30 0 16248370 \
     "NDK (Side by side) $SDK_NDK_VERSION"
 rm -rf -- "$temporary"
 trap - EXIT

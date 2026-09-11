@@ -21,7 +21,7 @@ from elf_validation import is_valid_elf_machine
 
 # SDK-owned additions are exact relative links, never another host tree.
 SDK_COMPATIBILITY_LINKS = {
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64": "linux-aarch64",
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64": "linux-aarch64",
 }
 
 
@@ -78,9 +78,9 @@ GENERIC_METADATA_FIELDS = {
     "cmake/4.1.2/package.xml": (
         "cmake;4.1.2", "4", "1", "2", "CMake 4.1.2 Linux AArch64",
     ),
-    "ndk/27.3.13750724/package.xml": (
-        "ndk;27.3.13750724", "27", "3", "13750724",
-        "NDK (Side by side) 27.3.13750724 Linux AArch64",
+    "ndk/30.0.16248370/package.xml": (
+        "ndk;30.0.16248370", "30", "0", "16248370",
+        "NDK (Side by side) 30.0.16248370 Linux AArch64",
     ),
 }
 
@@ -112,70 +112,63 @@ NDK_HOST_PREFIXES = (
     ("simpleperf/bin/linux/x86_64", "simpleperf/bin/linux/aarch64"),
 )
 
-NDK_HOST_GENERATED_CONTENT_PREFIXES = (
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
-    "lib/aarch64-unknown-linux-gnu",
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
-    "lib/clang/18/lib/aarch64-unknown-linux-gnu",
-)
-
 NDK_HOST_GENERATED_CONTENT_FILES = {
-    "ndk/27.3.13750724/prebuilt/linux-aarch64/lib/libyasm.a",
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/lib/libbolt_rt_instr.a",
+    "ndk/30.0.16248370/prebuilt/linux-aarch64/lib/libyasm.a",
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/lib/libbolt_rt_instr.a",
+    *("ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
+      "lib/aarch64-unknown-linux-gnu/" + name
+      for name in ("libc++.a", "libc++abi.a", "libc++experimental.a",
+                   "libunwind.a", "libsimpleperf_readelf.a")),
 }
 
 NDK_PYTHON_CONFIG_FILES = {
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
     "python3/include/python3.11/pyconfig.h",
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
     "python3/lib/pkgconfig/python-3.11-embed.pc",
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
     "python3/lib/pkgconfig/python-3.11.pc",
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
     "python3/lib/python3.11/_sysconfigdata__linux_aarch64-linux-gnu.py",
 }
 
-NDK_COMPILER_RT_GENERATED_TEXT_PREFIX = (
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
-    "lib/clang/18/lib/aarch64-unknown-linux-gnu/"
-)
-
 NDK_HOST_ELF_CONTENT_PREFIXES = (
-    "ndk/27.3.13750724/prebuilt/linux-aarch64/bin",
-    "ndk/27.3.13750724/shader-tools/linux-aarch64",
-    "ndk/27.3.13750724/simpleperf/bin/linux/aarch64",
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/bin",
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/python3",
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/lib/python3.11",
+    "ndk/30.0.16248370/prebuilt/linux-aarch64/bin",
+    "ndk/30.0.16248370/shader-tools/linux-aarch64",
+    "ndk/30.0.16248370/simpleperf/bin/linux/aarch64",
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/bin",
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/python3",
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/lib/python3.11",
 )
 
 NDK_HOST_ELF_CONTENT_DIRECTORIES = {
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/lib",
-    "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/musl/lib",
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/lib/aarch64-unknown-linux-gnu",
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/lib",
+    "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/musl/lib",
 }
 
 NDK_HOST_SCRIPT_DIFFERENCES = {
-    "ndk/27.3.13750724/build/cmake/android-legacy.toolchain.cmake",
-    "ndk/27.3.13750724/build/cmake/android.toolchain.cmake",
-    "ndk/27.3.13750724/build/ndk-build",
-    "ndk/27.3.13750724/build/tools/make_standalone_toolchain.py",
-    "ndk/27.3.13750724/build/tools/ndk_bin_common.sh",
-    "ndk/27.3.13750724/ndk-gdb",
-    "ndk/27.3.13750724/ndk-lldb",
-    "ndk/27.3.13750724/ndk-stack",
-    "ndk/27.3.13750724/ndk-which",
-    "ndk/27.3.13750724/simpleperf/simpleperf_utils.py",
-    "ndk/27.3.13750724/prebuilt/linux-aarch64/bin/ndkgdb.pyz",
-    "ndk/27.3.13750724/prebuilt/linux-aarch64/bin/ndk-which",
-    "ndk/27.3.13750724/build/cmake/hooks/post/Android-Determine.cmake",
+    "ndk/30.0.16248370/build/cmake/android-legacy.toolchain.cmake",
+    "ndk/30.0.16248370/build/cmake/android.toolchain.cmake",
+    "ndk/30.0.16248370/build/ndk-build",
+    "ndk/30.0.16248370/build/tools/make_standalone_toolchain.py",
+    "ndk/30.0.16248370/build/tools/ndk_bin_common.sh",
+    "ndk/30.0.16248370/ndk-gdb",
+    "ndk/30.0.16248370/ndk-lldb",
+    "ndk/30.0.16248370/ndk-stack",
+    "ndk/30.0.16248370/ndk-which",
+    "ndk/30.0.16248370/simpleperf/simpleperf_utils.py",
+    "ndk/30.0.16248370/prebuilt/linux-aarch64/bin/ndkgdb.pyz",
+    "ndk/30.0.16248370/prebuilt/linux-aarch64/bin/ndk-which",
+    "ndk/30.0.16248370/build/cmake/hooks/post/Android-Determine.cmake",
 }
 
-NDK_ROOT_PREFIX = "ndk/27.3.13750724/"
+NDK_ROOT_PREFIX = "ndk/30.0.16248370/"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PLATFORM_TOOLS_RELEASE_ARCHIVE = (
     PROJECT_ROOT / ".cache/platform-tools_r37.0.1-linux.zip"
 )
-NDK_RELEASE_ARCHIVE = PROJECT_ROOT / ".cache/android-ndk-r27d-linux.zip"
+NDK_RELEASE_ARCHIVE = PROJECT_ROOT / ".cache/android-ndk-r30-linux.zip"
 
 
 @dataclass(frozen=True)
@@ -296,15 +289,12 @@ def generated_metadata_matches(relative: str, candidate: Path) -> bool:
 
 def ndk_release_file_matches(relative: str, candidate: Path) -> bool:
     ndk_relative = relative.removeprefix(NDK_ROOT_PREFIX)
-    archive_member = f"android-ndk-r27d/{ndk_relative}"
+    archive_member = f"android-ndk-r30/{ndk_relative}"
     return archive_member_matches(NDK_RELEASE_ARCHIVE, archive_member, candidate)
 
 
 def is_ndk_generated_text_path(relative: str) -> bool:
-    return relative in NDK_PYTHON_CONFIG_FILES or (
-        relative.startswith(NDK_COMPILER_RT_GENERATED_TEXT_PREFIX)
-        and relative.endswith(".syms")
-    )
+    return relative in NDK_PYTHON_CONFIG_FILES
 
 
 def content_difference_is_expected(
@@ -326,12 +316,7 @@ def content_difference_is_expected(
     if is_ndk_generated_text_path(relative):
         return ndk_release_file_matches(relative, candidate.source)
     if relative in NDK_HOST_GENERATED_CONTENT_FILES:
-        return True
-    if any(
-        relative == prefix or relative.startswith(prefix + "/")
-        for prefix in NDK_HOST_GENERATED_CONTENT_PREFIXES
-    ):
-        return True
+        return ndk_release_file_matches(relative, candidate.source)
     # A machine transition is valid only in an explicitly identified NDK host
     # position. Android target ELFs below the host-tagged sysroot and Clang
     # runtime directories must remain byte-for-byte identical.
@@ -432,6 +417,7 @@ def main() -> int:
         requires_explicit_content = relative in (
             HOST_SCRIPT_CONTENT_DIFFERENCES
             | NDK_HOST_SCRIPT_DIFFERENCES
+            | NDK_HOST_GENERATED_CONTENT_FILES
             | GENERATED_METADATA
         ) or is_ndk_generated_text_path(relative)
         if (

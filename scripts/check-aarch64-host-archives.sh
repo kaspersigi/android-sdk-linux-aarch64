@@ -3,7 +3,7 @@ set -euo pipefail
 export LC_ALL=C
 
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-package_root=${1:-$project_root/dist/sdk/ndk/27.3.13750724}
+package_root=${1:-$project_root/dist/sdk/ndk/30.0.16248370}
 manifest=${2:-$project_root/manifests/ndk-host-archives.tsv}
 toolchain="$package_root/toolchains/llvm/prebuilt/linux-aarch64"
 # Preflight runs before build/ exists. Keep scratch files independent of the
@@ -38,8 +38,6 @@ done
         -maxdepth 1 -type f -name '*.a'
     find "$toolchain/lib" -maxdepth 1 -type f -name '*.a'
     find "$toolchain/lib/aarch64-unknown-linux-gnu" \
-        -maxdepth 1 -type f -name '*.a'
-    find "$toolchain/lib/clang/18/lib/aarch64-unknown-linux-gnu" \
         -maxdepth 1 -type f -name '*.a'
 } | sort -u > "$archive_list"
 

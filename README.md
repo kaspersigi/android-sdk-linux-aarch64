@@ -1,7 +1,7 @@
 # Android SDK 36 for Linux AArch64
 
-This project assembles a fixed Android SDK for Ubuntu 26.04 AArch64. Its
-version set mirrors `/mnt/develop/android/sdk`:
+This project assembles a fixed Android SDK for Ubuntu 26.04 AArch64 with the
+following component versions:
 
 - Build-Tools 36.0.0
 - Platform android-36 revision 2
@@ -10,7 +10,7 @@ version set mirrors `/mnt/develop/android/sdk`:
 - CMake 4.1.2 with Ninja 1.12.1
 - Platform-Tools 37.0.1 package layout, rebuilt from the locked public 37.0.0
   source line
-- NDK 27.3.13750724 (r27d)
+- NDK 30.0.16248370 (r30), Clang/LLD 21.0.0
 
 The assembled directory is `dist/sdk`. The final archive is
 `dist/android-sdk-linux.zip` and has one top-level `sdk/` directory.
@@ -30,7 +30,7 @@ published full Release archives and combines them with the remaining fixed SDK
 components:
 
 ```text
-android-ndk-r27d-linux-aarch64 release ---------+
+android-ndk-r30-linux-aarch64 release ---------+
                                                  |
 platform-tools_r37.0.1-linux-aarch64 release ---+--> android-sdk-linux.zip
                                                  |
@@ -45,7 +45,7 @@ expected asset names:
 - The latest full Release of the Platform-Tools producer is installed as
   `platform-tools/`, while the package/source boundary stays 37.0.1/37.0.0.
 - The latest full Release of the NDK producer is installed as
-  `ndk/27.3.13750724/`, while the source version stays r27d.
+  `ndk/30.0.16248370/`, while the source version stays r30.
 - Google SDK, Kitware CMake, and Ninja upstream archives with fixed versions
   and checksums for the other SDK components.
 
@@ -81,7 +81,7 @@ SDK build. Publish the fixed standalone NDK first, then build this SDK.
 # Download once and run the early gate, without building SDK components:
 ./scripts/resolute-local-build.sh --preflight-only
 # With already downloaded dependencies, test a local producer candidate:
-bash scripts/preflight-ndk.sh /path/to/android-ndk-r27d
+bash scripts/preflight-ndk.sh /path/to/android-ndk-r30
 ```
 
 The optional local path is diagnostic only; it cannot replace the
@@ -96,8 +96,16 @@ hosted workflow; the shared build entry rejects a smaller local `JOBS` value.
 `JOBS` is reserved for CI, and GitHub Actions explicitly sets `JOBS=4` for
 the free hosted runner.
 
+The packaged NDK r30 requires glibc 2.43 or newer on the AArch64 host.
 The build entry rejects hosts other than Ubuntu 26.04 unless
 `ALLOW_UNSUPPORTED_HOST=1` is explicitly set.
+
+Build-Tools retains its independent Ubuntu LLVM 22 libc++ dependency; the
+NDK compiler and Build-Tools LLD wrapper use Clang/LLD 21.0.0. On a shared
+build host where installing `libc++-22-dev:arm64` would replace another LLVM
+development package, extract that Ubuntu package locally and set
+`SDK_LIBCXX_ARCHIVE` to the absolute path of its AArch64 `libc++.a`.
+The default remains `/usr/lib/aarch64-linux-gnu/libc++.a`.
 
 The complete file, link, content, and normalized permission comparison always
 constructs a fresh x86_64 reference tree from checksum-pinned Google archives.
@@ -109,9 +117,11 @@ skipped.
 Validation also structurally parses every NDK host ELF position, checks every
 host ELF's package-local SONAME dependency closure, verifies the pinned member
 inventory and relocatable-object (`ET_REL`) structure of all NDK host static
-libraries, loads each host C++ runtime independently, and verifies that
-compiler-rt does not depend on a
-system `libstdc++.so`. It then uses the packaged Clang and LLD to link a C
+libraries, loads each host C++ runtime independently, and rejects dependencies
+on system `libstdc++.so` or `libgcc_s.so.1`. NDK r30 carries seven host static
+libraries with 630 members; it no longer includes the r27 GNU/Linux host
+compiler-rt directory. Android compiler-rt payloads remain byte-identical to
+the official reference. The gate uses packaged Clang/LLD 21.0.0 to link a C
 executable and C++ shared library for `aarch64-linux-android21`. These checks
 verify the downloaded producer artifact again after it has been integrated
 into the complete SDK. The SDK-level gate also checks every explicit
@@ -123,7 +133,7 @@ templates, while the thirteen patched NDK host script/archive files must remain 
 to the checksum-verified NDK archive from the selected latest full Release.
 The SDK also adds one relative NDK toolchain alias for AGP, checked for its
 exact link target and exercised with `llvm-strip` and `llvm-objcopy`.
-The NDK's four CPython configuration files and all compiler-rt `*.syms` files
+The NDK's four CPython configuration files and seven host static libraries
 are also compared byte-for-byte with that selected archive. SDK-generated
 package metadata must match its checked-in template exactly, and the
 Platform-Tools `package.xml` must match the selected Platform-Tools Release.
@@ -199,7 +209,7 @@ make GRADLE_FLAGS="--parallel --max-workers=$(nproc) -Pandroid.aapt2FromMavenOve
 
 For MySnapcam on a non-HWASan device, use `make no-asan-debug` with the same
 `GRADLE_FLAGS`. Its JNI build also requires AArch64 host versions of NDK
-`27.3.13750724`, CMake `4.1.2`, and Ninja; the AAPT2 override only selects AAPT2.
+`30.0.16248370`, CMake `4.1.2`, and Ninja; the AAPT2 override only selects AAPT2.
 
 For persistent configuration, add or update this one entry in the
 `gradle.properties` file **inside the Gradle user home actually used by the
@@ -285,7 +295,7 @@ Without a compatibility path, a build can fail with:
 
 ```text
 Execution failed for task ':app:stripDebugDebugSymbols'.
-A problem occurred starting process 'command '.../ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip''
+A problem occurred starting process 'command '.../ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip''
 ```
 
 This is a separate host-path selection issue from the Maven AAPT2 failure.
@@ -296,7 +306,7 @@ does not change AGP's NDK host-path selection.
 SDK assembly now adds this relative directory link after copying the NDK:
 
 ```text
-ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64 -> linux-aarch64
+ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-x86_64 -> linux-aarch64
 ```
 
 Both names reach the same AArch64 toolchain; the link does not add x86_64
@@ -313,7 +323,7 @@ the **Linux AArch64 build machine**. Adjust the SDK installation path first:
 ```bash
 (
   set -eu
-  cd /mnt/develop/android/sdk/ndk/27.3.13750724/toolchains/llvm/prebuilt
+  cd /mnt/develop/android/sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt
   test -d linux-aarch64
   if [ ! -e linux-x86_64 ] && [ ! -L linux-x86_64 ]; then
     ln -sT linux-aarch64 linux-x86_64
@@ -400,8 +410,8 @@ already incorporated.
   37.0.1 binary package, but the locked public source line is 37.0.0; the
   community AArch64 `adb` and `fastboot` binaries therefore report 37.0.0.
 - NDK comes from the latest full Release of
-  `kaspersigi/android-ndk-r27d-linux-aarch64` and remains locked to revision
-  `27.3.13750724` (r27d).
+  `kaspersigi/android-ndk-r30-linux-aarch64` and remains locked to revision
+  `30.0.16248370` (r30).
 
 Google does not publish the Command-line Tools 22 `android` bootstrapper for
 Linux AArch64. It is an online self-updater, so this fixed SDK replaces it with
@@ -415,7 +425,7 @@ directories remain byte-for-byte identical to Google's package.
 
 The official x86_64 Build-Tools 36 package includes LLD 9.0.7. This SDK does not
 build that legacy LLVM tree: `build-tools/36.0.0/lld-bin/lld` is an explicit
-wrapper around the pinned NDK r27d LLD 18.0.4. That linker is validated during
+wrapper around the pinned NDK r30 LLD 21.0.0. That linker is validated during
 the SDK build and is the linker used by the supported NDK workflow.
 
 ## License

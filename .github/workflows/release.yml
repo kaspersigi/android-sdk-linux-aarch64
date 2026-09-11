@@ -23,7 +23,7 @@ jobs:
         with:
           path: |
             .cache/reference-platform-tools_r37.0.1-linux.zip
-            .cache/reference-android-ndk-r27d-linux.zip
+            .cache/reference-android-ndk-r30-linux.zip
           key: android-sdk-x86_64-reference-${{ hashFiles('sources.lock') }}
       - name: Reclaim runner disk space
         run: |

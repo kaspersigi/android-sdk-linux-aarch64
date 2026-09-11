@@ -28,14 +28,11 @@ run_checker() {
     return "$status"
 }
 
-package_root="$temporary_dir/android-ndk-r27d"
+package_root="$temporary_dir/android-ndk-r30"
 archive="$package_root/prebuilt/linux-aarch64/lib/probe.a"
-compiler_rt_dir="$package_root/toolchains/llvm/prebuilt/linux-aarch64/"
-compiler_rt_dir+="lib/clang/18/lib/aarch64-unknown-linux-gnu"
 mkdir -p \
     "$(dirname "$archive")" \
-    "$package_root/toolchains/llvm/prebuilt/linux-aarch64/lib/aarch64-unknown-linux-gnu" \
-    "$compiler_rt_dir"
+    "$package_root/toolchains/llvm/prebuilt/linux-aarch64/lib/aarch64-unknown-linux-gnu"
 printf '%s\n' 'int probe;' |
     aarch64-linux-gnu-gcc -x c -c - -o "$temporary_dir/probe.o"
 aarch64-linux-gnu-ar rcS "$archive" "$temporary_dir/probe.o"

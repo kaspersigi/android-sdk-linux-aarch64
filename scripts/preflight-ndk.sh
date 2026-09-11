@@ -18,7 +18,7 @@ if (( $# )); then
 else
     verify_cached_release_archive "$NDK_RELEASE_ASSET"
     unzip -q "$cache_dir/$NDK_RELEASE_ASSET" -d "$temporary/ndk"
-    ndk="$temporary/ndk/android-ndk-r27d"
+    ndk="$temporary/ndk/android-ndk-r30"
 fi
 
 python3 -B "$project_root/tests/compare_reference_layout_test.py"

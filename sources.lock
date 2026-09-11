@@ -6,7 +6,7 @@
 SDK_BUILD_TOOLS_VERSION=36.0.0
 SDK_PLATFORM_VERSION=android-36
 SDK_CMDLINE_TOOLS_VERSION=22.0
-SDK_NDK_VERSION=27.3.13750724
+SDK_NDK_VERSION=30.0.16248370
 SDK_PLATFORM_TOOLS_VERSION=37.0.1
 SDK_PLATFORM_TOOLS_PUBLIC_SOURCE_VERSION=37.0.0
 
@@ -40,15 +40,15 @@ PLATFORM_TOOLS_RELEASE_REPOSITORY=kaspersigi/platform-tools_r37.0.1-linux-aarch6
 PLATFORM_TOOLS_RELEASE_ASSET=platform-tools_r37.0.1-linux.zip
 PLATFORM_TOOLS_RELEASE_CHECKSUM_ASSET=platform-tools_r37.0.1-linux.zip.sha256
 
-NDK_RELEASE_REPOSITORY=kaspersigi/android-ndk-r27d-linux-aarch64
-NDK_RELEASE_ASSET=android-ndk-r27d-linux.zip
-NDK_RELEASE_CHECKSUM_ASSET=android-ndk-r27d-linux.zip.sha256
+NDK_RELEASE_REPOSITORY=kaspersigi/android-ndk-r30-linux-aarch64
+NDK_RELEASE_ASSET=android-ndk-r30-linux.zip
+NDK_RELEASE_CHECKSUM_ASSET=android-ndk-r30-linux.zip.sha256
 
 # Official Linux x86_64 archives used to construct a fresh complete SDK
 # reference tree for every default build.
 REFERENCE_PLATFORM_TOOLS_ARCHIVE=platform-tools_r37.0.1-linux.zip
 REFERENCE_PLATFORM_TOOLS_URL=https://dl.google.com/android/repository/platform-tools_r37.0.1-linux.zip
 REFERENCE_PLATFORM_TOOLS_SHA256=d230f13842f60f782a8645f9c813f8f845bf36089ea7289f28c48f17979313f1
-REFERENCE_NDK_ARCHIVE=android-ndk-r27d-linux.zip
-REFERENCE_NDK_URL=https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
-REFERENCE_NDK_SHA256=601246087a682d1944e1e16dd85bc6e49560fe8b6d61255be2829178c8ed15d9
+REFERENCE_NDK_ARCHIVE=android-ndk-r30-linux.zip
+REFERENCE_NDK_URL=https://dl.google.com/android/repository/android-ndk-r30-linux.zip
+REFERENCE_NDK_SHA256=753611f410d002cfcd3f3dc2ef49aad532089d3180b436c060a90bf0fcb64df2

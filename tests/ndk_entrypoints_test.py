@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import zipimport
+import types
 import os
 from pathlib import Path
 import platform
@@ -26,7 +28,12 @@ from types import SimpleNamespace
 class EntryPoints(unittest.TestCase):
     def debugger(self):
         sys.path.insert(0, str(NDK / "prebuilt/linux-aarch64/bin/ndkgdb.pyz"))
-        return importlib.import_module("ndkgdb")
+        loader = zipimport.zipimporter(str(NDK / "prebuilt/linux-aarch64/bin/ndkgdb.pyz"))
+        module = types.ModuleType("ndkgdb")
+        module.__file__ = loader.get_filename("__main__")
+        module.__loader__ = loader
+        exec(loader.get_code("__main__"), module.__dict__)
+        return module
 
     def test_debugger_package_root_and_api(self):
         debugger = self.debugger()
@@ -53,7 +60,7 @@ class EntryPoints(unittest.TestCase):
                 with self.assertRaises(StopBeforeDeviceWrites):
                     debugger.main()
                 selected = Path(stop.call_args.args[-1])
-                expected = NDK / "toolchains/llvm/prebuilt/linux-aarch64/lib/clang/18/lib/linux" / arch / "lldb-server"
+                expected = NDK / "toolchains/llvm/prebuilt/linux-aarch64/lib/clang/21/lib/linux" / arch / "lldb-server"
                 self.assertEqual(selected, expected)
                 self.assertTrue(selected.is_file())
 
@@ -162,7 +169,9 @@ class EntryPoints(unittest.TestCase):
             "import pathlib, platform, sys; n=pathlib.Path(sys.argv[1]); "
             "assert platform.machine().lower() in ('aarch64', 'arm64'); "
             "sys.path.insert(0,str(n/'prebuilt/linux-aarch64/bin/ndkgdb.pyz')); "
-            "import ndkgdb; assert ndkgdb.get_llvm_host_name() == 'linux-aarch64'; "
+            "import zipimport, types; loader=zipimport.zipimporter(str(n/'prebuilt/linux-aarch64/bin/ndkgdb.pyz')); "
+            "ndkgdb=types.ModuleType('ndkgdb'); ndkgdb.__file__=loader.get_filename('__main__'); ndkgdb.__loader__=loader; "
+            "exec(loader.get_code('__main__'),ndkgdb.__dict__); assert ndkgdb.get_llvm_host_name() == 'linux-aarch64'; "
             "assert pathlib.Path(ndkgdb.NDK_PATH) == n; "
             "t=n/'toolchains/llvm/prebuilt'/ndkgdb.get_llvm_host_name(); "
             "assert ndkgdb.get_lldb_path(str(t)); assert ndkgdb.get_llvm_package_version(str(t)); "

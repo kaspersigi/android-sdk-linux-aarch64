@@ -46,16 +46,18 @@ class NdkHostElfDifferenceTest(unittest.TestCase):
 
     def test_rebuilt_ndk_host_elf_positions_are_allowed(self) -> None:
         paths = (
-            "ndk/27.3.13750724/prebuilt/linux-aarch64/bin/make",
-            "ndk/27.3.13750724/shader-tools/linux-aarch64/glslc",
-            "ndk/27.3.13750724/simpleperf/bin/linux/aarch64/simpleperf",
-            "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/bin/clang-18",
-            "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/lib/liblldb.so",
-            "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+            "ndk/30.0.16248370/prebuilt/linux-aarch64/bin/make",
+            "ndk/30.0.16248370/shader-tools/linux-aarch64/glslc",
+            "ndk/30.0.16248370/simpleperf/bin/linux/aarch64/simpleperf",
+            "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/bin/clang-21",
+            "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/lib/liblldb.so",
+            "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
+            "lib/aarch64-unknown-linux-gnu/libc++.so",
+            "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
             "musl/lib/libclang.so",
-            "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+            "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
             "python3/bin/python3.11",
-            "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+            "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
             "lib/python3.11/host.so",
         )
         for relative in paths:
@@ -68,10 +70,10 @@ class NdkHostElfDifferenceTest(unittest.TestCase):
 
     def test_android_target_elf_positions_are_rejected(self) -> None:
         paths = (
-            "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+            "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
             "sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o",
-            "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
-            "lib/clang/18/lib/linux/libclang_rt.asan-x86_64-android.so",
+            "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
+            "lib/clang/21/lib/linux/libclang_rt.asan-x86_64-android.so",
             "platforms/android-36/x86_64/target.so",
         )
         for relative in paths:
@@ -86,7 +88,7 @@ class NdkHostElfDifferenceTest(unittest.TestCase):
         self.candidate.write_bytes(self.candidate.read_bytes()[:64])
         self.assertFalse(
             content_difference_is_expected(
-                "ndk/27.3.13750724/toolchains/llvm/prebuilt/"
+                "ndk/30.0.16248370/toolchains/llvm/prebuilt/"
                 "linux-aarch64/bin/clang-tidy",
                 self.expected,
                 self.actual,
@@ -99,12 +101,20 @@ class NdkHostElfDifferenceTest(unittest.TestCase):
         self.candidate.write_bytes(content)
         self.assertFalse(
             content_difference_is_expected(
-                "ndk/27.3.13750724/toolchains/llvm/prebuilt/"
+                "ndk/30.0.16248370/toolchains/llvm/prebuilt/"
                 "linux-aarch64/bin/clang-tidy",
                 self.expected,
                 self.actual,
             )
         )
+
+    def test_host_runtime_directory_does_not_allow_arbitrary_content(self) -> None:
+        self.candidate.write_bytes(b"corrupt runtime")
+        self.assertFalse(content_difference_is_expected(
+            "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
+            "lib/aarch64-unknown-linux-gnu/libc++.so",
+            self.expected, self.actual,
+        ))
 
     def test_explicit_sdk_host_elf_requires_valid_structures(self) -> None:
         relative = "build-tools/36.0.0/aapt"
@@ -150,7 +160,7 @@ class HostScriptDifferenceTest(unittest.TestCase):
     def test_ndk_script_rejects_unpinned_content(self) -> None:
         archive = Path(self.temporary_directory.name) / "ndk.zip"
         with zipfile.ZipFile(archive, "w") as output:
-            output.writestr("android-ndk-r27d/ndk-gdb", b"release script\n")
+            output.writestr("android-ndk-r30/ndk-gdb", b"release script\n")
         function_globals = content_difference_is_expected.__globals__
         original_archive = function_globals["NDK_RELEASE_ARCHIVE"]
         function_globals["NDK_RELEASE_ARCHIVE"] = archive
@@ -158,7 +168,7 @@ class HostScriptDifferenceTest(unittest.TestCase):
             self.candidate.write_bytes(b"release script\n")
             self.assertTrue(
                 content_difference_is_expected(
-                    "ndk/27.3.13750724/ndk-gdb",
+                    "ndk/30.0.16248370/ndk-gdb",
                     self.entry(self.reference),
                     self.entry(self.candidate),
                 )
@@ -166,7 +176,7 @@ class HostScriptDifferenceTest(unittest.TestCase):
             self.candidate.write_bytes(b"")
             self.assertFalse(
                 content_difference_is_expected(
-                    "ndk/27.3.13750724/ndk-gdb",
+                    "ndk/30.0.16248370/ndk-gdb",
                     self.entry(self.reference),
                     self.entry(self.candidate),
                 )
@@ -188,7 +198,7 @@ class HostScriptDifferenceTest(unittest.TestCase):
                 os.environ["NDK_RELEASE_ARCHIVE"] = original
         self.assertEqual(
             fresh_module["NDK_RELEASE_ARCHIVE"],
-            PROJECT_ROOT / ".cache/android-ndk-r27d-linux.zip",
+            PROJECT_ROOT / ".cache/android-ndk-r30-linux.zip",
         )
 
     def test_ndk_entrypoint_fixes_are_release_pinned_not_broad_exemptions(self) -> None:
@@ -197,7 +207,7 @@ class HostScriptDifferenceTest(unittest.TestCase):
         archive = Path(self.temporary_directory.name) / "ndk-entrypoints.zip"
         with zipfile.ZipFile(archive, "w") as output:
             for relative in paths:
-                output.writestr("android-ndk-r27d/" + relative, b"release-fixed-entrypoint")
+                output.writestr("android-ndk-r30/" + relative, b"release-fixed-entrypoint")
         function_globals = content_difference_is_expected.__globals__
         original = function_globals["NDK_RELEASE_ARCHIVE"]
         function_globals["NDK_RELEASE_ARCHIVE"] = archive
@@ -206,22 +216,22 @@ class HostScriptDifferenceTest(unittest.TestCase):
                 with self.subTest(path=relative):
                     self.candidate.write_bytes(b"release-fixed-entrypoint")
                     self.assertTrue(content_difference_is_expected(
-                        "ndk/27.3.13750724/" + relative,
+                        "ndk/30.0.16248370/" + relative,
                         self.entry(self.reference), self.entry(self.candidate)))
                     self.candidate.write_bytes(b"tampered-entrypoint")
                     self.assertFalse(content_difference_is_expected(
-                        "ndk/27.3.13750724/" + relative,
+                        "ndk/30.0.16248370/" + relative,
                         self.entry(self.reference), self.entry(self.candidate)))
         finally:
             function_globals["NDK_RELEASE_ARCHIVE"] = original
 
     def test_ndk_generated_text_must_equal_selected_release(self) -> None:
         relative = (
-            "ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-aarch64/"
+            "ndk/30.0.16248370/toolchains/llvm/prebuilt/linux-aarch64/"
             "python3/include/python3.11/pyconfig.h"
         )
-        member = "android-ndk-r27d/" + relative.removeprefix(
-            "ndk/27.3.13750724/"
+        member = "android-ndk-r30/" + relative.removeprefix(
+            "ndk/30.0.16248370/"
         )
         archive = Path(self.temporary_directory.name) / "ndk-generated-text.zip"
         payload = b"#define SIZEOF_VOID_P 8\n"
@@ -243,6 +253,32 @@ class HostScriptDifferenceTest(unittest.TestCase):
                     relative, self.entry(self.reference), self.entry(self.candidate)
                 )
             )
+        finally:
+            function_globals["NDK_RELEASE_ARCHIVE"] = original_archive
+
+    def test_ndk_host_archives_must_equal_selected_release(self) -> None:
+        paths = sorted(MODULE["NDK_HOST_GENERATED_CONTENT_FILES"])
+        self.assertEqual(len(paths), 7)
+        archive = Path(self.temporary_directory.name) / "ndk-host-archives.zip"
+        payload = b"!<arch>\nrelease archive members"
+        with zipfile.ZipFile(archive, "w") as output:
+            for relative in paths:
+                output.writestr(
+                    "android-ndk-r30/" + relative.removeprefix("ndk/30.0.16248370/"),
+                    payload,
+                )
+        function_globals = content_difference_is_expected.__globals__
+        original_archive = function_globals["NDK_RELEASE_ARCHIVE"]
+        function_globals["NDK_RELEASE_ARCHIVE"] = archive
+        try:
+            for relative in paths:
+                with self.subTest(path=relative):
+                    self.candidate.write_bytes(payload)
+                    self.assertTrue(content_difference_is_expected(
+                        relative, self.entry(self.reference), self.entry(self.candidate)))
+                    self.candidate.write_bytes(b"!<arch>\ntampered archive members")
+                    self.assertFalse(content_difference_is_expected(
+                        relative, self.entry(self.reference), self.entry(self.candidate)))
         finally:
             function_globals["NDK_RELEASE_ARCHIVE"] = original_archive
 
@@ -357,7 +393,7 @@ class AgpNdkCompatibilityLinkTest(unittest.TestCase):
         root = Path(self.temporary_directory.name)
         self.reference = root / "reference"
         self.candidate = root / "candidate"
-        prebuilt = Path("ndk/27.3.13750724/toolchains/llvm/prebuilt")
+        prebuilt = Path("ndk/30.0.16248370/toolchains/llvm/prebuilt")
         original = self.reference / prebuilt / "linux-x86_64"
         self.target = self.candidate / prebuilt / "linux-aarch64"
         self.alias = self.candidate / prebuilt / "linux-x86_64"
@@ -432,7 +468,7 @@ class NormalizedReferenceCollisionTest(unittest.TestCase):
             for host in ("linux-x86_64", "linux-aarch64"):
                 path = (
                     reference
-                    / "ndk/27.3.13750724/prebuilt"
+                    / "ndk/30.0.16248370/prebuilt"
                     / host
                     / "bin/make"
                 )
